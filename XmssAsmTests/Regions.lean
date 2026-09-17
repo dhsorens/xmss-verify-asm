@@ -79,7 +79,7 @@ structure ChainImpl where
   code : CodeMem
   endIdx : Nat
 
-def implA : ChainImpl := ⟨"A", verifierCode, idxChainWalk + chainWalkA.length⟩
+def implA : ChainImpl := ⟨"A", verifierCode, idxChainWalk + chainWalk.length⟩
 def implB : ChainImpl := ⟨"B", verifierCodeB, idxChainWalk + chainWalkB.length⟩
 
 /-- Non-zero, address-dependent memory contents, so that a stray store shows. -/
@@ -179,7 +179,7 @@ structure Build where
   code : CodeMem
   cwLen : Nat
 
-def buildA : Build := ⟨"A", verifierCode, chainWalkA.length⟩
+def buildA : Build := ⟨"A", verifierCode, chainWalk.length⟩
 def buildB : Build := ⟨"B", verifierCodeB, chainWalkB.length⟩
 
 def Build.idxLeaf (b : Build) : Nat := 92 + b.cwLen

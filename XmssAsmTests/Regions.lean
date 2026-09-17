@@ -14,6 +14,7 @@ import XmssAsm.Regions.Chain
 import XmssAsm.Regions.Chains
 import XmssAsm.Regions.Leaf
 import XmssAsm.Regions.Decode
+import XmssAsm.Regions.Auth
 import XmssAsm.Represent
 
 namespace XmssAsm.Tests
@@ -381,6 +382,71 @@ def decodeCorpus : List DecodeCase := Id.run do
   for f in corpus do
     if f.name.startsWith "valid-" && !(f.name.any (· == '/')) then
       out := out ++ [⟨s!"decode.{f.name}", evalD (Concrete.encodingHash f.pk.parameter f.ep f.msg f.sig.randomness)⟩]
+  return out
+
+/-! ## The auth region in isolation -/
+
+structure AuthCase where
+  name : String
+  P : PublicParameter
+  ep : Epoch
+  path : MerkleLevel → Digest
+  leaf : Digest
+
+def Build.idxFinal (b : Build) : Nat := 149 + b.cwLen
+
+def authState (b : Build) (c : AuthCase) : MachineState :=
+  let s : MachineState :=
+    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := b.code, pc := addr b.idxAuth }
+  let s := s.setReg .x8 (BitVec.ofNat 64 c.ep.val)
+  let s := s.writeWords BUFA_P [dLo c.P, dHi c.P]
+  let s := s.writeWords CUR [dLo c.leaf, dHi c.leaf]
+  s.writeWords AUTH ((List.ofFn c.path).flatMap digestWords)
+
+def inWAuth (a : Word) : Bool :=
+  (BUFA.toNat ≤ a.toNat && a.toNat < BUFA.toNat + 16) ||
+  (CUR.toNat ≤ a.toNat && a.toNat < CUR.toNat + 32) ||
+  (OUT.toNat ≤ a.toNat && a.toNat < OUT.toNat + 32)
+
+def checkAuth (b : Build) (c : AuthCase) : Option String × Stats :=
+  let s := authState b c
+  let (s', st, reached) := runUntil H_test 5000 s (addr b.idxFinal) {}
+  let sig : Signature := ⟨0, fun _ => 0, c.path⟩
+  let expected := evalD (Concrete.authenticationRoot c.P c.ep sig treeHeight c.leaf)
+  let got := readDigest s' CUR
+  let clobOk := allRegs.all fun r => CLOB.contains r || s'.getReg r == s.getReg r
+  let frameOk := layoutCells.all fun a => inWAuth a || s'.getMem a == s.getMem a
+  let err :=
+    if !reached then some s!"{c.name}[{b.name}]: auth did not reach idxFinal (pc={s'.pc.toNat})"
+    else if got != expected then some s!"{c.name}[{b.name}]: root mismatch"
+    else if !clobOk then some s!"{c.name}[{b.name}]: non-CLOB register written"
+    else if !frameOk then some s!"{c.name}[{b.name}]: memory outside WAuth written"
+    else if st.hashes != 32 then some s!"{c.name}[{b.name}]: {st.hashes} hashes, expected 32"
+    else none
+  (err, st)
+
+/-- Epochs exercising both child orderings at every level: all bits clear, all
+    set, alternating patterns, and pseudo-random. -/
+def authCorpus : List AuthCase := Id.run do
+  let mut out : List AuthCase := []
+  let mut g : Rng := ⟨0xA07⟩
+  let epochs : List (String × Epoch) :=
+    [("ep0", epochOf 0), ("epMax", epochOf (lifetime - 1)), ("ep0x5555", epochOf 0x55555555),
+     ("ep0xAAAA", epochOf 0xAAAAAAAA), ("ep1", epochOf 1), ("ep2^31", epochOf (2 ^ 31))]
+  for (en, ep) in epochs do
+    let (P, g1) := g.digest
+    let (ps, g2) := g1.digests treeHeight
+    let (leaf, g3) := g2.digest
+    g := g3
+    out := out ++ [⟨s!"auth.{en}", P, ep, ofList ps treeHeight, leaf⟩]
+  for k in List.range 3 do
+    let (P, g1) := g.digest
+    let (ep, g2) := g1.epoch
+    let (ps, g3) := g2.digests treeHeight
+    let (leaf, g4) := g3.digest
+    g := g4
+    out := out ++ [⟨s!"auth.rnd{k}", P, ep, ofList ps treeHeight, leaf⟩]
+  out := out ++ [⟨"auth.zero", 0, epochOf 7, fun _ => 0, 0⟩, ⟨"auth.ones", allOnes, epochOf 7, fun _ => allOnes, allOnes⟩]
   return out
 
 end XmssAsm.Tests

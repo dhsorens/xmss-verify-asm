@@ -69,6 +69,16 @@ def main (args : List String) : IO UInt32 := do
         if b.name == "A" then
           IO.println s!"ok   {c.name}: {if acc then "accept" else "reject"} steps={st.steps}"
   IO.println s!"{nDecode} decode cases run ({nAccept} accepting)"
+  IO.println "-- component checks: auth region (32 levels, both orderings), builds A and B"
+  let mut nAuth := 0
+  for b in [buildA, buildB] do
+    for c in authCorpus do
+      nAuth := nAuth + 1
+      match checkAuth b c with
+      | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
+      | (none, st) =>
+        if b.name == "A" then IO.println s!"ok   {c.name}: steps={st.steps} hashes={st.hashes}"
+  IO.println s!"{nAuth} auth cases run"
   IO.println "-- end-to-end corpus, artifact (implementation A)"
   let mut n := 0
   for f in corpus do
@@ -90,5 +100,5 @@ def main (args : List String) : IO UInt32 := do
       if r.a0 == 1 then
         IO.println s!"ok   [B] {f.name}: steps={r.stats.steps} hashes={r.stats.hashes} \
           ordinary={r.stats.ordinary} cost={r.stats.cost hashCost}"
-  IO.println s!"{n} fixtures (A), {nB} fixtures (B), {nChain} chain cases, {nRegion} chains/leaf cases, {nDecode} decode cases, {componentChecks.length} bridge checks, {failures} failures"
+  IO.println s!"{n} fixtures (A), {nB} fixtures (B), {nChain} chain cases, {nRegion} chains/leaf cases, {nDecode} decode cases, {nAuth} auth cases, {componentChecks.length} bridge checks, {failures} failures"
   return if failures = 0 then 0 else 1

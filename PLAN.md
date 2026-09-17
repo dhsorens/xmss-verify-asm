@@ -64,6 +64,18 @@ region cases per build (sum 195 / 194 / 196, each padding bit, zero, ones,
 all-7, random, the valid fixtures' encoding digests). Decode costs 222 steps
 on accept, 4/6 on a padding reject, 223 on a sum reject.
 
+M6 done (2026-09-17): `XmssAsm/Regions/Auth.lean` proves `auth_correct`, the
+32-level authentication path, as `Runs.loop` over an invariant carrying
+`authD H P ep sig leaf L` in `CUR`. Each level selects the child order from
+bit `L` of the epoch (`bit_test`: the machine's `(ep >>> L) &&& 1` is
+`Nat.testBit`), writes the merkle tweak (`tw0_merkle`, `tw1_node`: the
+machine's `ep >>> (L+1)` is `Concrete.nodeIndex`), and hashes through one
+shared block contract `authHash_correct` used by both orderings.
+`XmssAsm/Regions/Final.lean` proves `final_correct`: the region halts with
+`a0 = 1` exactly when `CUR = ROOT`. 22 auth region cases per build (epochs
+0, max, 0x55555555, 0xAAAAAAAA, 1, 2^31, random, zero and ones digests), each
+checking the root against `authenticationRoot`, the frame, and 32 hash calls.
+
 The project target is:
 
 > Produce pure RV64 bytecode implementing the XMSS verifier, prove it equivalent to the existing Lean specification, measure its virtual RV cycle count, and make the proof architecture robust enough that the bytecode can be aggressively optimized without rebuilding the high-level proof.

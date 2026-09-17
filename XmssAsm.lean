@@ -33,5 +33,7 @@ import XmssAsm.Regions.Chains
 import XmssAsm.Regions.Leaf
 import XmssAsm.Spec.Decode
 import XmssAsm.Regions.Decode
+import XmssAsm.Regions.Auth
+import XmssAsm.Regions.Final
 import XmssAsm.Represent
 import XmssAsm.Contract

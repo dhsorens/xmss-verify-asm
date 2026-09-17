@@ -25,5 +25,6 @@ import XmssAsm.Machine.Sym
 import XmssAsm.Machine.Eval
 import XmssAsm.Program.Verifier
 import XmssAsm.Spec.Eval
+import XmssAsm.Spec.Bytes
 import XmssAsm.Represent
 import XmssAsm.Contract

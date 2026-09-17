@@ -26,5 +26,7 @@ import XmssAsm.Machine.Eval
 import XmssAsm.Program.Verifier
 import XmssAsm.Spec.Eval
 import XmssAsm.Spec.Bytes
+import XmssAsm.Regions.Common
+import XmssAsm.Regions.Chain
 import XmssAsm.Represent
 import XmssAsm.Contract

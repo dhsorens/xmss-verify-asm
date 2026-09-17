@@ -199,6 +199,37 @@ def addr (k : Nat) : Word := CODE_BASE + BitVec.ofNat 64 (4 * k)
 
 /-! ## Region boundaries, as instruction indices -/
 
+/-! ## Code hypotheses for region proofs
+
+A region theorem assumes only that its own instructions sit at their slot:
+`CodeAt C base prog k` says `prog[j]` is at `base + 4 (k + j)`. Unfolded, it is
+one fetch fact per instruction, which is what symbolic execution consumes. -/
+
+def CodeAt (C : CodeMem) (base : Word) : Program → Nat → Prop
+  | [], _ => True
+  | i :: rest, k => C (base + BitVec.ofNat 64 (4 * k)) = some i ∧ CodeAt C base rest (k + 1)
+
+instance CodeAt.decidable (C : CodeMem) (base : Word) :
+    ∀ (prog : Program) (k : Nat), Decidable (CodeAt C base prog k)
+  | [], _ => isTrue trivial
+  | _ :: rest, k => @instDecidableAnd _ _ _ (CodeAt.decidable C base rest (k + 1))
+
+/-- The one number a chain-walk swap changes (with `chainWalk`, `chainWalk_correct`
+    and `bOff_chainsLoop`). Every later region index is stated relative to it. -/
+theorem chainWalk_length : chainWalk.length = 22 := rfl
+theorem chainWalkA_length : chainWalkA.length = 22 := rfl
+theorem chainWalkB_length : chainWalkB.length = 20 := rfl
+
+/-! ## The loop branch offsets, evaluated (stated after `bOff`/`jOff` unfold) -/
+
+theorem bOff_decodeLoop : BitVec.ofInt 13 (-(4 * decodeBody.length)) = BitVec.ofInt 13 (-36) := rfl
+theorem bOff_chainWalkA : BitVec.ofInt 13 (4 * (chainStepA.length + 2)) = BitVec.ofInt 13 80 := rfl
+theorem jOff_chainWalkA : BitVec.ofInt 21 (-(4 * (chainStepA.length + 1))) = BitVec.ofInt 21 (-76) := rfl
+theorem bOff_chainWalkB : BitVec.ofInt 13 (4 * (chainStepB.length + 2)) = BitVec.ofInt 13 44 := rfl
+theorem jOff_chainWalkB : BitVec.ofInt 21 (-(4 * (chainStepB.length + 1))) = BitVec.ofInt 21 (-40) := rfl
+theorem bOff_chainsLoop : BitVec.ofInt 13 (-(4 * chainsBody.length)) = BitVec.ofInt 13 (-164) := rfl
+theorem bOff_authLoop : BitVec.ofInt 13 (-(4 * authBody.length)) = BitVec.ofInt 13 (-152) := rfl
+
 def idxInitPayload : Nat := initP.length
 def idxInitHash : Nat := idxInitPayload + initPayload.length
 def idxDecode : Nat := init.length
@@ -227,6 +258,10 @@ namespace XmssAsm
 
 /-! ## Index values, for the simp set -/
 
+/-- The selected chain walk is where the verifier expects it. -/
+theorem verifierCode_chainWalk : CodeAt verifierCode (addr idxChainWalk) chainWalk 0 := by
+  decide +kernel
+
 theorem idxInitPayload_eq : idxInitPayload = 9 := by decide +kernel
 theorem idxInitHash_eq : idxInitHash = 28 := by decide +kernel
 theorem idxDecode_eq : idxDecode = 43 := by decide +kernel
@@ -236,14 +271,14 @@ theorem idxDecodeReject_eq : idxDecodeReject = 65 := by decide +kernel
 theorem idxChains_eq : idxChains = 68 := by decide +kernel
 theorem idxChainsLoop_eq : idxChainsLoop = 72 := by decide +kernel
 theorem idxChainWalk_eq : idxChainWalk = 81 := by decide +kernel
-theorem idxChainStore_eq : idxChainStore = 103 := by decide +kernel
-theorem idxLeaf_eq : idxLeaf = 114 := by decide +kernel
-theorem idxAuth_eq : idxAuth = 130 := by decide +kernel
-theorem idxAuthLoop_eq : idxAuthLoop = 132 := by decide +kernel
-theorem idxAuthHash_eq : idxAuthHash = 147 := by decide +kernel
-theorem idxFinal_eq : idxFinal = 171 := by decide +kernel
-theorem idxAccept_eq : idxAccept = 179 := by decide +kernel
-theorem idxReject_eq : idxReject = 182 := by decide +kernel
-theorem idxEnd_eq : idxEnd = 185 := by decide +kernel
+theorem idxChainStore_eq : idxChainStore = 81 + chainWalk.length := by decide +kernel
+theorem idxLeaf_eq : idxLeaf = 92 + chainWalk.length := by decide +kernel
+theorem idxAuth_eq : idxAuth = 108 + chainWalk.length := by decide +kernel
+theorem idxAuthLoop_eq : idxAuthLoop = 110 + chainWalk.length := by decide +kernel
+theorem idxAuthHash_eq : idxAuthHash = 125 + chainWalk.length := by decide +kernel
+theorem idxFinal_eq : idxFinal = 149 + chainWalk.length := by decide +kernel
+theorem idxAccept_eq : idxAccept = 157 + chainWalk.length := by decide +kernel
+theorem idxReject_eq : idxReject = 160 + chainWalk.length := by decide +kernel
+theorem idxEnd_eq : idxEnd = 163 + chainWalk.length := by decide +kernel
 
 end XmssAsm

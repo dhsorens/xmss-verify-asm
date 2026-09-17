@@ -70,6 +70,7 @@ macro "sym_norm" loc:(Lean.Parser.Tactic.location)? : tactic =>
       RiscvZkvm.Rv64.MachineState.getReg, RiscvZkvm.Rv64.MachineState.getMem,
       RiscvZkvm.Rv64.signExtend12, RiscvZkvm.Rv64.signExtend13, RiscvZkvm.Rv64.signExtend21,
       XmssAsm.regBeq, XmssAsm.wordBeq, XmssAsm.if_if_same, XmssAsm.hashEffect_eq,
+      XmssAsm.hashEffectWith,
       XmssAsm.HASH_ID, XmssAsm.CODE_BASE,
       XmssAsm.ROOT, XmssAsm.PARAM, XmssAsm.EPOCH, XmssAsm.MSG, XmssAsm.RHO, XmssAsm.CHAINS, XmssAsm.AUTH,
       XmssAsm.BUFA, XmssAsm.BUFA_P, XmssAsm.CUR, XmssAsm.CUR2, XmssAsm.OUT, XmssAsm.DIGITS,
@@ -78,7 +79,11 @@ macro "sym_norm" loc:(Lean.Parser.Tactic.location)? : tactic =>
       XmssAsm.idxDecodePost_eq, XmssAsm.idxDecodeReject_eq, XmssAsm.idxChains_eq, XmssAsm.idxChainsLoop_eq,
       XmssAsm.idxChainWalk_eq, XmssAsm.idxChainStore_eq, XmssAsm.idxLeaf_eq, XmssAsm.idxAuth_eq,
       XmssAsm.idxAuthLoop_eq, XmssAsm.idxAuthHash_eq, XmssAsm.idxFinal_eq, XmssAsm.idxAccept_eq,
-      XmssAsm.idxReject_eq, XmssAsm.idxEnd_eq,
+      XmssAsm.idxReject_eq, XmssAsm.idxEnd_eq, XmssAsm.chainWalk_length,
+      XmssAsm.chainWalkA_length, XmssAsm.chainWalkB_length,
+      XmssAsm.bOff_decodeLoop, XmssAsm.bOff_chainWalkA, XmssAsm.jOff_chainWalkA, XmssAsm.bOff_chainWalkB,
+      XmssAsm.jOff_chainWalkB, XmssAsm.bOff_chainsLoop, XmssAsm.bOff_authLoop,
+      XmssAsm.jOff, XmssAsm.bOff, XmssAsm.imm, Int.reduceNeg,
       decide_eq_true_eq, decide_true, decide_false, eq_self_iff_true, reduceCtorEq,
       ite_true, ite_false, Bool.false_eq_true, ↓reduceIte, bne_iff_ne, ne_eq, not_true_eq_false,
       not_false_eq_true,
@@ -119,6 +124,38 @@ macro "sym_sd_with" h:term : tactic =>
 macro "sym_hash" h:term : tactic =>
   `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_hash (by sym_fetch) (by sym_norm; rfl) $h) ?_; sym_norm))
 
+/-- Turn `hC : CodeAt C base prog k` into one literal fetch fact per instruction.
+    The `outer` definitions are unfolded first (so loop branch offsets that
+    mention an inner block's length are evaluated by the offset lemmas before
+    that block is unfolded), then the `inner` ones. -/
+macro "sym_code" hC:ident "[" outer:Lean.Parser.Tactic.simpLemma,* "]" "[" inner:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
+  `(tactic| (simp only [XmssAsm.CodeAt, $outer,*, List.cons_append, List.nil_append] at $hC:ident;
+             sym_norm at $hC:ident;
+             simp only [XmssAsm.CodeAt, $inner,*, List.cons_append, List.nil_append] at $hC:ident;
+             sym_norm at $hC:ident))
+
+/-! ### Steps with an explicit fetch fact `hf : C pc = some i` (abstract code maps) -/
+
+macro "sym_plain_f" hf:term : tactic =>
+  `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_plain $hf (by decide) (by decide) (by decide)) ?_; sym_norm))
+macro "sym_ld_f" hf:term : tactic =>
+  `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_ld $hf (by sym_valid)) ?_; sym_norm))
+macro "sym_sd_f" hf:term : tactic =>
+  `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_sd $hf (by sym_valid)) ?_; sym_norm))
+macro "sym_ld_f_with" hf:term h:term : tactic =>
+  `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_ld $hf $h) ?_; sym_norm))
+macro "sym_sd_f_with" hf:term h:term : tactic =>
+  `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_sd $hf $h) ?_; sym_norm))
+macro "sym_hash_in_f" hf:ident inp:term : tactic =>
+  `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_hash_input (inp := $inp) $hf (by sym_norm <;> rfl) (by simp only [XmssAsm.hashArgsValid, XmssAsm.outBlockValid]; sym_norm <;> decide) ?hin) ?_; rotate_left; sym_norm))
+
+/-- Execute the hash call with a named input `inp`; leaves the goal
+    `hashInputOf s = inp` (tagged `hin`) for the state at the call. -/
+macro "sym_hash_in" inp:term : tactic =>
+  `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_hash_input (inp := $inp) (by sym_fetch)
+      (by sym_norm <;> rfl)
+      (by simp only [XmssAsm.hashArgsValid, XmssAsm.outBlockValid]; sym_norm <;> decide) ?hin) ?_; rotate_left; sym_norm))
+
 /-- Resolve a branch after `sym_plain` produced `Runs (if c then _ else _) Q`. -/
 macro "sym_branch" h:term : tactic =>
   `(tactic| (first | rw [if_pos $h] | rw [if_neg $h] | simp only [$h:term, ite_true, ite_false]))
@@ -138,6 +175,15 @@ macro "sym_frame_reg" : tactic =>
              simp only [XmssAsm.CLOB, List.mem_cons, List.mem_nil_iff, or_false, not_or] at hr;
              sym_norm; simp only [hr, if_false, ite_false, ↓reduceIte]))
 
+/-- `sym_frame_mem` for a named write-set predicate `W` (unfolded first). -/
+macro "sym_frame_mem_W" W:ident : tactic =>
+  `(tactic| (intro a ha; simp only [$W:ident, XmssAsm.InRange, not_or] at ha; sym_norm at ha;
+             sym_norm <;> simp (disch := bv_omega) only [if_neg]))
+
+/-- `Frame W s s'` for a record-literal `s'` and a named write set `W`. -/
+macro "sym_frame_W" W:ident : tactic =>
+  `(tactic| (refine ⟨rfl, rfl, rfl, rfl, rfl, ?_, ?_⟩; (sym_frame_mem_W $W); (sym_frame_reg)))
+
 /-- The whole `Frame W s s'` obligation for a record-literal `s'`. -/
 macro "sym_frame" : tactic =>
-  `(tactic| (refine ⟨rfl, rfl, rfl, rfl, rfl, ?_, ?_⟩; · sym_frame_mem; · sym_frame_reg))
+  `(tactic| (refine ⟨rfl, rfl, rfl, rfl, rfl, ?_, ?_⟩; (sym_frame_mem); (sym_frame_reg)))

@@ -67,6 +67,17 @@ def hashArgsValid (s : MachineState) : Bool :=
 def hashEffect (H : List UInt8 → BitVec 256) (s : MachineState) : MachineState :=
   (s.writeWords (s.getReg .x12) (outWords (H (hashInputOf s)))).setPC (s.pc + 4)
 
+/-- `hashEffect` with the hash output named: the four output stores at
+    literal offsets, the shape symbolic execution keeps. -/
+def hashEffectWith (o : BitVec 256) (s : MachineState) : MachineState :=
+  ((((s.setMem (s.getReg .x12) (o.extractLsb' 0 64)).setMem
+    (s.getReg .x12 + 8) (o.extractLsb' 64 64)).setMem
+    (s.getReg .x12 + 8 + 8) (o.extractLsb' 128 64)).setMem
+    (s.getReg .x12 + 8 + 8 + 8) (o.extractLsb' 192 64)).setPC (s.pc + 4)
+
+theorem hashEffect_eq_with (H : List UInt8 → BitVec 256) (s : MachineState) :
+    hashEffect H s = hashEffectWith (H (hashInputOf s)) s := rfl
+
 /-- The machine is at a hash call. -/
 def AtHashCall (s : MachineState) : Prop :=
   s.code s.pc = some .ECALL ∧ s.getReg .x5 = HASH_ID
@@ -146,6 +157,14 @@ theorem stepH_hash {H : List UInt8 → BitVec 256} {s : MachineState}
     (hv : hashArgsValid s = true) :
     stepH H s = some (hashEffect H s) := by
   unfold stepH; rw [hf]; simp [h5, hv]
+
+/-- The hash call with its input identified: the successor mentions `H inp`
+    rather than `H (hashInputOf s)`. -/
+theorem stepH_hash_input {H : List UInt8 → BitVec 256} {s : MachineState} {inp : List UInt8}
+    (hf : s.code s.pc = some .ECALL) (h5 : s.getReg .x5 = HASH_ID)
+    (hv : hashArgsValid s = true) (hin : hashInputOf s = inp) :
+    stepH H s = some (hashEffectWith (H inp) s) := by
+  rw [stepH_hash hf h5 hv, hashEffect_eq_with, hin]
 
 /-- `HALT`: `ECALL` with `x5 = 0` stops the machine. -/
 theorem stepH_halt {H : List UInt8 → BitVec 256} {s : MachineState}

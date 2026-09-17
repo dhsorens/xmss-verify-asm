@@ -28,5 +28,8 @@ import XmssAsm.Spec.Eval
 import XmssAsm.Spec.Bytes
 import XmssAsm.Regions.Common
 import XmssAsm.Regions.Chain
+import XmssAsm.Regions.Init
+import XmssAsm.Regions.Chains
+import XmssAsm.Regions.Leaf
 import XmssAsm.Represent
 import XmssAsm.Contract

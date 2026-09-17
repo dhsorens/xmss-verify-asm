@@ -143,6 +143,9 @@ def chainStore : Program :=
 
 def chainsBody : Program := chainLoad ++ chainWalk ++ chainStore
 
+/-- The end of the loop body after the chain walk: store, advance, branch back. -/
+def chainsTail : Program := chainStore ++ [.BNE .x13 .x6 (bOff (-(4 * chainsBody.length)))]
+
 def chainsLoop : Program := chainsBody ++ [.BNE .x13 .x6 (bOff (-(4 * chainsBody.length)))]
 
 def chains : Program := chainsPre ++ chainsLoop

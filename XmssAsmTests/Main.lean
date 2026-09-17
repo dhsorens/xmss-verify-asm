@@ -37,6 +37,24 @@ def main (args : List String) : IO UInt32 := do
   for ((x, a), (_, b)) in cyA.zip cyB do
     IO.println s!"digit {x}: A steps={a.steps} hashes={a.hashes} cost={a.cost hashCost} | \
       B steps={b.steps} hashes={b.hashes} cost={b.cost hashCost}"
+  IO.println "-- component checks: chains region (42 endpoints) and leaf region, builds A and B"
+  let mut nRegion := 0
+  for b in [buildA, buildB] do
+    for c in chainsCorpus do
+      nRegion := nRegion + 1
+      match checkChains b c with
+      | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
+      | (none, st) =>
+        if c.name.startsWith "chains.all" || c.name == "chains.rnd0" then
+          IO.println s!"ok   {c.name}[{b.name}]: steps={st.steps} hashes={st.hashes} cost={st.cost hashCost}"
+    for c in leafCorpus do
+      nRegion := nRegion + 1
+      match checkLeaf b c with
+      | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
+      | (none, st) =>
+        if c.name == "leaf.rnd0" then
+          IO.println s!"ok   {c.name}[{b.name}]: steps={st.steps} hashes={st.hashes} cost={st.cost hashCost}"
+  IO.println s!"{nRegion} chains/leaf region cases run"
   IO.println "-- end-to-end corpus, artifact (implementation A)"
   let mut n := 0
   for f in corpus do
@@ -58,5 +76,5 @@ def main (args : List String) : IO UInt32 := do
       if r.a0 == 1 then
         IO.println s!"ok   [B] {f.name}: steps={r.stats.steps} hashes={r.stats.hashes} \
           ordinary={r.stats.ordinary} cost={r.stats.cost hashCost}"
-  IO.println s!"{n} fixtures (A), {nB} fixtures (B), {nChain} chain cases, {componentChecks.length} bridge checks, {failures} failures"
+  IO.println s!"{n} fixtures (A), {nB} fixtures (B), {nChain} chain cases, {nRegion} chains/leaf cases, {componentChecks.length} bridge checks, {failures} failures"
   return if failures = 0 then 0 else 1

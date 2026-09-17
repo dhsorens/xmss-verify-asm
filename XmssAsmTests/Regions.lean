@@ -11,6 +11,9 @@
 import XmssAsmTests.Fixtures
 import XmssAsm.Machine.Eval
 import XmssAsm.Regions.Chain
+import XmssAsm.Regions.Chains
+import XmssAsm.Regions.Leaf
+import XmssAsm.Represent
 
 namespace XmssAsm.Tests
 
@@ -167,5 +170,135 @@ def chainCycles (impl : ChainImpl) : List (Nat × Stats) :=
   (List.range 8).map fun xn =>
     let c : ChainCase := ⟨"", 0, epochOf 0, ci 0, digit xn, 0⟩
     (xn, (checkChain impl c).2)
+
+/-! ## The chains region and the leaf region in isolation -/
+
+/-- A verifier build: its code and the chain-walk length that fixes the later indices. -/
+structure Build where
+  name : String
+  code : CodeMem
+  cwLen : Nat
+
+def buildA : Build := ⟨"A", verifierCode, chainWalkA.length⟩
+def buildB : Build := ⟨"B", verifierCodeB, chainWalkB.length⟩
+
+def Build.idxLeaf (b : Build) : Nat := 92 + b.cwLen
+def Build.idxAuth (b : Build) : Nat := 108 + b.cwLen
+
+def inWChains (a : Word) : Bool :=
+  inWChain a || (ENDPTS.toNat ≤ a.toNat && a.toNat < ENDPTS.toNat + 672)
+
+def inWLeaf (a : Word) : Bool :=
+  (BUFL.toNat ≤ a.toNat && a.toNat < BUFL.toNat + 16) ||
+  (CUR.toNat ≤ a.toNat && a.toNat < CUR.toNat + 16) ||
+  (OUT.toNat ≤ a.toNat && a.toNat < OUT.toNat + 32)
+
+structure ChainsCase where
+  name : String
+  P : PublicParameter
+  ep : Epoch
+  cv : ChainIndex → Digest
+  enc : Encoding
+
+def chainsState (b : Build) (c : ChainsCase) : MachineState :=
+  let s : MachineState :=
+    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := b.code, pc := addr idxChains }
+  let s := s.setReg .x8 (BitVec.ofNat 64 c.ep.val)
+  let s := s.writeWords BUFA_P [dLo c.P, dHi c.P]
+  let s := s.writeWords CHAINS ((List.ofFn c.cv).flatMap digestWords)
+  s.writeWords DIGITS ((List.ofFn c.enc).map fun d => BitVec.ofNat 64 d.val)
+
+/-- Run the chains region on a build; `none` on success. -/
+def checkChains (b : Build) (c : ChainsCase) : Option String × Stats :=
+  let s := chainsState b c
+  let (s', st, reached) := runUntil H_test 20000 s (addr b.idxLeaf) {}
+  let endOk := (List.range numChains).all fun j =>
+    let jj : ChainIndex := ⟨j % numChains, Nat.mod_lt _ (by decide)⟩
+    readDigest s' (ENDPTS + BitVec.ofNat 64 (16 * j)) ==
+      evalD (Concrete.recoverChain c.P c.ep jj (c.enc jj) (c.cv jj))
+  let keepOk := s'.getReg .x8 == s.getReg .x8
+  let clobOk := allRegs.all fun r => CLOB.contains r || s'.getReg r == s.getReg r
+  let frameOk := layoutCells.all fun a => inWChains a || s'.getMem a == s.getMem a
+  let expectedHashes := (List.range numChains).foldl (fun acc j =>
+    acc + (7 - (c.enc ⟨j % numChains, Nat.mod_lt _ (by decide)⟩).val)) 0
+  let err :=
+    if !reached then some s!"{c.name}[{b.name}]: chains did not reach idxLeaf (pc={s'.pc.toNat})"
+    else if !endOk then some s!"{c.name}[{b.name}]: endpoint mismatch"
+    else if !keepOk then some s!"{c.name}[{b.name}]: x8 clobbered"
+    else if !clobOk then some s!"{c.name}[{b.name}]: non-CLOB register written"
+    else if !frameOk then some s!"{c.name}[{b.name}]: memory outside WChains written"
+    else if st.hashes != expectedHashes then some s!"{c.name}[{b.name}]: {st.hashes} hashes, expected {expectedHashes}"
+    else none
+  (err, st)
+
+def constEnc (d : Nat) : Encoding := fun _ => digit d
+
+def Rng.encoding (g : Rng) : Encoding × Rng := Id.run do
+  let mut g := g
+  let mut ds : List Nat := []
+  for _ in List.range numChains do
+    let (x, g') := g.next
+    g := g'
+    ds := ds ++ [x.toNat % 8]
+  return (fun i => digit (ds.getD i.val 0), g)
+
+def chainsCorpus : List ChainsCase := Id.run do
+  let mut out : List ChainsCase := []
+  let mut g : Rng := ⟨0xC4A1⟩
+  for k in List.range 3 do
+    let (P, g1) := g.digest
+    let (ep, g2) := g1.epoch
+    let (cvs, g3) := g2.digests numChains
+    let (enc, g4) := g3.encoding
+    g := g4
+    let cv := ofList cvs numChains
+    let e := if k == 0 then epochOf 0 else if k == 1 then epochOf (lifetime - 1) else ep
+    out := out ++ [⟨s!"chains.rnd{k}", P, e, cv, enc⟩, ⟨s!"chains.all0.{k}", P, e, cv, constEnc 0⟩,
+      ⟨s!"chains.all7.{k}", P, e, cv, constEnc 7⟩]
+  return out
+
+structure LeafCase where
+  name : String
+  P : PublicParameter
+  ep : Epoch
+  e : ChainIndex → Digest
+
+def leafState (b : Build) (c : LeafCase) : MachineState :=
+  let s : MachineState :=
+    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := b.code, pc := addr b.idxLeaf }
+  let s := s.setReg .x8 (BitVec.ofNat 64 c.ep.val)
+  let s := s.writeWords BUFL_P [dLo c.P, dHi c.P]
+  s.writeWords ENDPTS ((List.ofFn c.e).flatMap digestWords)
+
+def checkLeaf (b : Build) (c : LeafCase) : Option String × Stats :=
+  let s := leafState b c
+  let (s', st, reached) := runUntil H_test 1000 s (addr b.idxAuth) {}
+  let got := readDigest s' CUR
+  let expected := evalD (Concrete.leafHash c.P c.ep c.e)
+  let keepOk := s'.getReg .x8 == s.getReg .x8
+  let clobOk := allRegs.all fun r => CLOB.contains r || s'.getReg r == s.getReg r
+  let frameOk := layoutCells.all fun a => inWLeaf a || s'.getMem a == s.getMem a
+  let err :=
+    if !reached then some s!"{c.name}[{b.name}]: leaf did not reach idxAuth (pc={s'.pc.toNat})"
+    else if got != expected then some s!"{c.name}[{b.name}]: leaf mismatch"
+    else if !keepOk then some s!"{c.name}[{b.name}]: x8 clobbered"
+    else if !clobOk then some s!"{c.name}[{b.name}]: non-CLOB register written"
+    else if !frameOk then some s!"{c.name}[{b.name}]: memory outside WLeaf written"
+    else if st.hashes != 1 then some s!"{c.name}[{b.name}]: {st.hashes} hashes, expected 1"
+    else none
+  (err, st)
+
+def leafCorpus : List LeafCase := Id.run do
+  let mut out : List LeafCase := []
+  let mut g : Rng := ⟨0x1EAF⟩
+  for k in List.range 3 do
+    let (P, g1) := g.digest
+    let (ep, g2) := g1.epoch
+    let (es, g3) := g2.digests numChains
+    g := g3
+    let e := if k == 0 then epochOf 0 else if k == 1 then epochOf (lifetime - 1) else ep
+    out := out ++ [⟨s!"leaf.rnd{k}", P, e, ofList es numChains⟩]
+  out := out ++ [⟨"leaf.zero", 0, epochOf 5, fun _ => 0⟩, ⟨"leaf.ones", allOnes, epochOf 5, fun _ => allOnes⟩]
+  return out
 
 end XmssAsm.Tests

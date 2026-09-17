@@ -84,6 +84,7 @@ macro "sym_norm" loc:(Lean.Parser.Tactic.location)? : tactic =>
       XmssAsm.bOff_decodeLoop, XmssAsm.bOff_chainWalkA, XmssAsm.jOff_chainWalkA, XmssAsm.bOff_chainWalkB,
       XmssAsm.jOff_chainWalkB, XmssAsm.bOff_chainsLoop, XmssAsm.bOff_authLoop,
       XmssAsm.jOff, XmssAsm.bOff, XmssAsm.imm, Int.reduceNeg,
+      BitVec.add_zero,
       decide_eq_true_eq, decide_true, decide_false, eq_self_iff_true, reduceCtorEq,
       ite_true, ite_false, Bool.false_eq_true, ↓reduceIte, bne_iff_ne, ne_eq, not_true_eq_false,
       not_false_eq_true,
@@ -134,6 +135,11 @@ macro "sym_code" hC:ident "[" outer:Lean.Parser.Tactic.simpLemma,* "]" "[" inner
              simp only [XmssAsm.CodeAt, $inner,*, List.cons_append, List.nil_append] at $hC:ident;
              sym_norm at $hC:ident))
 
+/-- `sym_code` for a straight-line region: one unfolding phase. -/
+macro "sym_code1" hC:ident "[" defs:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
+  `(tactic| (simp only [XmssAsm.CodeAt, $defs,*, List.cons_append, List.nil_append] at $hC:ident;
+             sym_norm at $hC:ident))
+
 /-! ### Steps with an explicit fetch fact `hf : C pc = some i` (abstract code maps) -/
 
 macro "sym_plain_f" hf:term : tactic =>
@@ -142,9 +148,9 @@ macro "sym_ld_f" hf:term : tactic =>
   `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_ld $hf (by sym_valid)) ?_; sym_norm))
 macro "sym_sd_f" hf:term : tactic =>
   `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_sd $hf (by sym_valid)) ?_; sym_norm))
-macro "sym_ld_f_with" hf:term h:term : tactic =>
+macro "sym_ld_f_with" hf:ident h:term : tactic =>
   `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_ld $hf $h) ?_; sym_norm))
-macro "sym_sd_f_with" hf:term h:term : tactic =>
+macro "sym_sd_f_with" hf:ident h:term : tactic =>
   `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_sd $hf $h) ?_; sym_norm))
 macro "sym_hash_in_f" hf:ident inp:term : tactic =>
   `(tactic| (refine XmssAsm.Runs.step (XmssAsm.stepH_hash_input (inp := $inp) $hf (by sym_norm <;> rfl) (by simp only [XmssAsm.hashArgsValid, XmssAsm.outBlockValid]; sym_norm <;> decide) ?hin) ?_; rotate_left; sym_norm))

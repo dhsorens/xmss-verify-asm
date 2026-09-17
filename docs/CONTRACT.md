@@ -113,6 +113,21 @@ says only that `prog` sits at `base`; it is discharged for the artifact by
 depends on the rest of the program, and callers compose regions with
 `Runs.bind`/`Runs.loop`.
 
+The six regions and their contracts:
+
+| region | file | contract |
+|---|---|---|
+| init | `Regions/Init.lean` | `P` in both hash buffers, the encoding digest in `x20`/`x21` |
+| decode | `Regions/Decode.lean` | `TargetSum.decodeDigest`: digits in `DIGITS`, or halt with `a0 = 0` |
+| chains | `Regions/Chains.lean` | every `ENDPTS` slot holds `recoverChain` of its chain |
+| leaf | `Regions/Leaf.lean` | `CUR` holds `leafHash` of the endpoints |
+| auth | `Regions/Auth.lean` | `CUR` holds `authenticationRoot` after 32 levels |
+| final | `Regions/Final.lean` | halt with `a0 = 1` exactly when `CUR = ROOT` |
+
+`XmssAsm/Verify.lean` composes them with `Runs.bind`; a region is connected to
+the next only through its postcondition and its frame, so the memory facts a
+later region needs are transported by `Frame.mem` rather than re-derived.
+
 The chain walk (`XmssAsm/Regions/Chain.lean`) is the template:
 
 * `ChainWalkPre s P ep i x v`: `pc = addr idxChainWalk`, `x8 = ep`,

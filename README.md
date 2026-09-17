@@ -15,9 +15,29 @@ in the style of evm-asm, maybe using the refinement calculus and/or myreen decom
 
 ## Status
 
-Scaffold only: builds warning-free, both gates pass, spec and machine reachable
-from one package. Nothing is implemented and nothing is proved. `PLAN.md` is
-the work queue and the list of open decisions; start there.
+**M1-M7 complete: the verifier is proved.**
+
+```
+theorem xmss_verify_correct (H : HashInput → HashOutput) : VerifierCorrect H
+```
+
+The artifact is `XmssAsm/Program/Verifier.lean`, 185 RV64IM instructions. The
+theorem (`XmssAsm/Verify.lean`) says that for every hash oracle `H`, starting
+from any machine state whose memory represents `(pk, ep, msg, sig)` with the
+program loaded at `CODE_BASE`, execution terminates in a halted state whose
+`a0` is `Concrete.verify pk ep msg sig` evaluated at `H`, having written
+nothing outside the scratch area. It rests on `propext`, `Classical.choice`
+and `Quot.sound` only.
+
+The proof is six region contracts composed with `Runs.bind`: init, decode,
+the 42-chain loop, leaf, the 32-level authentication path, and the final
+compare. The chain walk has two interchangeable implementations proved against
+one contract, and switching between them touches four definitions and no proof.
+
+Independently of the proof, the program is executed by an RV interpreter and
+compared with the specification on 104 end-to-end fixtures and 450 component
+cases (`scripts/test-differential.sh`), all passing. `PLAN.md` is the work
+queue; M8 (verified optimization) is what remains.
 
 ## The stack
 
@@ -64,10 +84,18 @@ comes from a precompile, is an open decision (`PLAN.md`).
 lakefile.toml             pins; comments say why each dependency and revision
 XmssAsm.lean              legacy root (see "module system" below)
 XmssAsm/Upstream.lean     module-system hub for the machine side (Decomp → riscv-zkvm)
+XmssAsm/Machine/          hash-oracle stepper, layout, symbolic-execution tactics, evaluator
+XmssAsm/Program/          the verifier as Program literals (the artifact)
+XmssAsm/Spec/             the upstream spec evaluated under a fixed oracle; byte lemmas
+XmssAsm/Represent.lean    memory represents (pk, ep, msg, sig); initState
+XmssAsm/Contract.lean     the theorem statement VerifierCorrect
+XmssAsm/Regions/          region contracts and their machine proofs
 XmssAsm/Smoke.lean        wiring check: a Program, cpsTotal and Nres all in scope
 XmssAsm/Spec.lean         imports XmssSecurity.Scheme and pins the names the bridge will use
+XmssAsmTests/             test hash, fixtures, differential harness (not trusted)
 XmssAsmTools/             the axiom gate (not imported by any theorem)
-scripts/                  check-axioms.sh, check-forbidden-tactics.sh
+scripts/                  check-axioms.sh, check-forbidden-tactics.sh, test-differential.sh
+docs/CONTRACT.md          the contract, layout, cost model, adversarial review
 PLAN.md                   the work queue and open decisions
 AGENTS.md                 standing rules
 ```

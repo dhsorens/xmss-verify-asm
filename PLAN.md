@@ -8,12 +8,89 @@ Dates are absolute. Today is 2026-09-17; the repository is still a scaffold.
 
 ## Where this is
 
-Scaffolded, not started. The four dependencies are pinned on one toolchain
-(Lean v4.33.0, Mathlib `db584cd6`), the axiom and forbidden-tactic gates are in
-place, and `XmssAsm/Smoke.lean` / `XmssAsm/Spec.lean` check that the machine
-side and the spec side are both reachable from one package.
+M1 done (2026-09-17): the contract is fixed (`docs/CONTRACT.md`,
+`XmssAsm/Contract.lean`), the hash-oracle stepper, layout, evaluator and the
+complete 185-instruction verifier exist, and the unproved program agrees with
+`Concrete.verify` on the 104-fixture end-to-end corpus
+(`scripts/test-differential.sh`). The correctness theorem is stated
+(`VerifierCorrect`) and being proved; M2-M7 are the proof.
 
-No verifier code has been written and no correctness theorem has been proved.
+M2 done (2026-09-17): the hash call's semantic contract (`stepH_hash`,
+`stepH_hash_input`, `hashInputOf_eq`), the byte-level bridge from the spec's
+`tweakBytes`/payload bytes to the machine's doublewords
+(`XmssAsm/Spec/Bytes.lean`: `tweakBytes_chain/leaf/encoding/merkle`,
+`tweakableHashInput_eq`, `encodingPayload_eq`, `nodePayload_eq`,
+`leafPayload_eq`, `readWords_digests`), the symbolic-execution engine
+(`XmssAsm/Machine/Sym.lean`: `sym_*` steps, `sym_code` fetch facts,
+`sym_frame_W`), the evaluator with its cost model (`XmssAsm/Machine/Eval.lean`,
+`docs/CONTRACT.md`), and 14 executable bridge checks in `difftest`.
+
+M3 done (2026-09-17): `XmssAsm/Regions/Chain.lean` proves two chain-walk
+implementations (`chainWalkA`: reload constants per step, 22 instructions;
+`chainWalkB`: constants hoisted, 20 instructions) against one contract
+`ChainWalkPre → Runs H s (ChainWalkPost … pcEnd)`: `CUR = recoverChain P ep i x v`,
+caller registers kept, `P` untouched, frame `WChain` (tweak, `CUR`, `OUT`),
+termination built into `Runs`. Each theorem assumes only `CodeAt C
+(addr idxChainWalk) chainWalkX 0`, so the caller-facing theorem
+`chainWalk_correct` selects an implementation without touching any proof. The
+swap was performed (A→B→A): 4 declared edits (`chainWalk`, `chainWalk_length`,
+`bOff_chainsLoop`, `chainWalk_correct`), zero proof changes, build and suite
+green. Digits `0..7` are differentially tested for both implementations (336
+region cases, frame checked on the whole data layout); cycle counts are in
+`docs/CONTRACT.md`. Next: M4 (`Regions/Init.lean`, 42-chain loop, leaf).
+
+M4 done (2026-09-17): `XmssAsm/Regions/Init.lean` (`init_correct`: `P` into
+both buffers, encoding payload, encoding hash into `x20`/`x21`),
+`XmssAsm/Regions/Chains.lean` (`chains_correct`: the 42-chain loop as
+`Runs.loop` over an invariant on the `ENDPTS` slots, each iteration going
+through `chainWalk_correct` and nothing else about the walk), and
+`XmssAsm/Regions/Leaf.lean` (`leaf_correct`: the 704-byte leaf hash via
+`readWords_digests`/`leafPayload_eq`). The A→B→A swap was repeated with the
+chains loop as a real caller: build and suite green, no proof edited. Region
+tests: 28 chains/leaf cases on both builds (all-0, all-7 and random digits;
+frame checked on the whole data layout). Chains region cycles (steps): A
+970 + 20·(hashes), B 1264 + 11·(hashes); leaf 16 steps, 1 hash.
+
+M5 done (2026-09-17): `XmssAsm/Spec/Decode.lean` relates the spec's
+`digestEncoding` to the machine's `(half >>> 3k) &&& 7` digits (`digit_lo`,
+`digit_hi`), the padding bits to the top bits of the halves (`pad63`,
+`pad127`), and the 21-step accumulator to `TargetSum.sum` (`sumTo_21`, via
+`Fin.sum_univ_eq_sum_range`/`Finset.sum_range_add`); `decodeDigest` is
+characterised case by case. `XmssAsm/Regions/Decode.lean` proves
+`decode_correct`: if `decodeDigest d = some enc` the region reaches `idxChains`
+with the 42 digits in `DIGITS`, else it halts at the reject stub with `a0 = 0`
+(`Rejected`: `SyscallHalted`, `stepH = none`), frame `DIGITS`. 50 decode
+region cases per build (sum 195 / 194 / 196, each padding bit, zero, ones,
+all-7, random, the valid fixtures' encoding digests). Decode costs 222 steps
+on accept, 4/6 on a padding reject, 223 on a sum reject.
+
+M6 done (2026-09-17): `XmssAsm/Regions/Auth.lean` proves `auth_correct`, the
+32-level authentication path, as `Runs.loop` over an invariant carrying
+`authD H P ep sig leaf L` in `CUR`. Each level selects the child order from
+bit `L` of the epoch (`bit_test`: the machine's `(ep >>> L) &&& 1` is
+`Nat.testBit`), writes the merkle tweak (`tw0_merkle`, `tw1_node`: the
+machine's `ep >>> (L+1)` is `Concrete.nodeIndex`), and hashes through one
+shared block contract `authHash_correct` used by both orderings.
+`XmssAsm/Regions/Final.lean` proves `final_correct`: the region halts with
+`a0 = 1` exactly when `CUR = ROOT`. 22 auth region cases per build (epochs
+0, max, 0x55555555, 0xAAAAAAAA, 1, 2^31, random, zero and ones digests), each
+checking the root against `authenticationRoot`, the frame, and 32 hash calls.
+
+M7 done (2026-09-17), and with it the goal of this plan. `XmssAsm/Verify.lean`
+composes the six region contracts with `Runs.bind` into
+
+    theorem xmss_verify_correct (H : HashInput → HashOutput) : VerifierCorrect H
+
+which discharges the M1 statement: for every hash oracle, every machine state
+whose memory `Represents (pk, ep, msg, sig)` with the verifier loaded at
+`CODE_BASE`, execution reaches a halted state whose `a0` is
+`resultWord (evalH H (Concrete.verify pk ep msg sig))`, with `Frame InScratch`.
+Termination is inside `Runs` (it is an existential over a step count), so it is
+proved, not assumed. `#print axioms` reports `propext`, `Classical.choice`,
+`Quot.sound` and nothing else: no `sorry`, no new trust. `initState_represents`
+proves the differential harness builds a state satisfying that precondition
+(PLAN E2), and `initState_verify` is the theorem applied to it. Baseline cycle
+measurements are in `docs/CONTRACT.md`.
 
 The project target is:
 
@@ -1465,3 +1542,4 @@ These can be layered on later without changing the core verifier theorem if the 
 
 - 2026-09-15: **M0** scaffold builds warning-free; both gates pass; `XmssSecurity.Scheme` elaborates on Lean v4.33.0 / VCVio `3ecd5523`; dependencies pinned on one toolchain.
 - 2026-09-17: project direction clarified: pure virtual RV64, abstract hash oracle, direct memory-to-spec representation relation, proof-preserving optimization, deterministic cycle benchmark, reusable verified blocks, and no zkVM backend in the core project.
+- 2026-09-17: **M1** contract stated (`VerifierCorrect`, `docs/CONTRACT.md`): `HashContract H` as the stepper `stepH`, fixed dword layout, `Represents`, termination as `SyscallHalted`, `Frame InScratch`; theorem shape reviewed. Also landed early: the full verifier program (185 instructions), the evaluator/cycle counter, and the end-to-end differential harness (104 fixtures, all agree; accepting runs 4331-4427 steps incl. 133 hash calls).

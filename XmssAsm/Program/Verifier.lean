@@ -194,6 +194,20 @@ def verifier : Program := init ++ decode ++ chains ++ leaf ++ auth ++ final
     `CODE_BASE`, nothing else. -/
 def verifierCode : CodeMem := loadProgram CODE_BASE verifier
 
+/-! ## The verifier with an alternative chain walk (tests and cycle reports) -/
+
+def chainsBodyWith (cw : Program) : Program := chainLoad ++ cw ++ chainStore
+def chainsWith (cw : Program) : Program :=
+  chainsPre ++ chainsBodyWith cw ++ [.BNE .x13 .x6 (bOff (-(4 * (chainsBodyWith cw).length)))]
+def verifierWith (cw : Program) : Program := init ++ decode ++ chainsWith cw ++ leaf ++ auth ++ final
+
+/-- The builder agrees with the artifact on the selected implementation. -/
+theorem verifierWith_chainWalk : verifierWith chainWalk = verifier := by decide +kernel
+
+/-- The verifier built with implementation B, for the differential suite. -/
+def verifierB : Program := verifierWith chainWalkB
+def verifierCodeB : CodeMem := loadProgram CODE_BASE verifierB
+
 /-- Address of instruction index `k`. -/
 def addr (k : Nat) : Word := CODE_BASE + BitVec.ofNat 64 (4 * k)
 

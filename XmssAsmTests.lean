@@ -10,3 +10,4 @@
 import XmssAsmTests.TestHash
 import XmssAsmTests.Fixtures
 import XmssAsmTests.Diff
+import XmssAsmTests.Regions

@@ -76,6 +76,22 @@ shared block contract `authHash_correct` used by both orderings.
 0, max, 0x55555555, 0xAAAAAAAA, 1, 2^31, random, zero and ones digests), each
 checking the root against `authenticationRoot`, the frame, and 32 hash calls.
 
+M7 done (2026-09-17), and with it the goal of this plan. `XmssAsm/Verify.lean`
+composes the six region contracts with `Runs.bind` into
+
+    theorem xmss_verify_correct (H : HashInput → HashOutput) : VerifierCorrect H
+
+which discharges the M1 statement: for every hash oracle, every machine state
+whose memory `Represents (pk, ep, msg, sig)` with the verifier loaded at
+`CODE_BASE`, execution reaches a halted state whose `a0` is
+`resultWord (evalH H (Concrete.verify pk ep msg sig))`, with `Frame InScratch`.
+Termination is inside `Runs` (it is an existential over a step count), so it is
+proved, not assumed. `#print axioms` reports `propext`, `Classical.choice`,
+`Quot.sound` and nothing else: no `sorry`, no new trust. `initState_represents`
+proves the differential harness builds a state satisfying that precondition
+(PLAN E2), and `initState_verify` is the theorem applied to it. Baseline cycle
+measurements are in `docs/CONTRACT.md`.
+
 The project target is:
 
 > Produce pure RV64 bytecode implementing the XMSS verifier, prove it equivalent to the existing Lean specification, measure its virtual RV cycle count, and make the proof architecture robust enough that the bytecode can be aggressively optimized without rebuilding the high-level proof.

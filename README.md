@@ -15,15 +15,29 @@ in the style of evm-asm, maybe using the refinement calculus and/or myreen decom
 
 ## Status
 
-M1-M3 done: the contract is fixed (`docs/CONTRACT.md`), the RV64 verifier is
-written (`XmssAsm/Program/Verifier.lean`, 185 instructions), it runs under
-the hash-oracle machine and agrees with `Concrete.verify` on the differential
-corpus (`scripts/test-differential.sh`). The correctness theorem is stated
-(`XmssAsm/Contract.lean`) and being proved region by region: the byte-level
-bridge and the symbolic-execution engine exist (`XmssAsm/Spec/Bytes.lean`,
-`XmssAsm/Machine/Sym.lean`), and the chain walk is proved for two
-interchangeable implementations (`XmssAsm/Regions/Chain.lean`). `PLAN.md` is
-the work queue.
+**M1-M7 complete: the verifier is proved.**
+
+```
+theorem xmss_verify_correct (H : HashInput → HashOutput) : VerifierCorrect H
+```
+
+The artifact is `XmssAsm/Program/Verifier.lean`, 185 RV64IM instructions. The
+theorem (`XmssAsm/Verify.lean`) says that for every hash oracle `H`, starting
+from any machine state whose memory represents `(pk, ep, msg, sig)` with the
+program loaded at `CODE_BASE`, execution terminates in a halted state whose
+`a0` is `Concrete.verify pk ep msg sig` evaluated at `H`, having written
+nothing outside the scratch area. It rests on `propext`, `Classical.choice`
+and `Quot.sound` only.
+
+The proof is six region contracts composed with `Runs.bind`: init, decode,
+the 42-chain loop, leaf, the 32-level authentication path, and the final
+compare. The chain walk has two interchangeable implementations proved against
+one contract, and switching between them touches four definitions and no proof.
+
+Independently of the proof, the program is executed by an RV interpreter and
+compared with the specification on 104 end-to-end fixtures and 450 component
+cases (`scripts/test-differential.sh`), all passing. `PLAN.md` is the work
+queue; M8 (verified optimization) is what remains.
 
 ## The stack
 

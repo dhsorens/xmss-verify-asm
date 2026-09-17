@@ -151,6 +151,50 @@ better artifact by about 600 instructions and is a one-swap change. The
 artifact stays on A until the M7 theorem is closed, so the optimization can be
 exercised against the complete proof.
 
+## Baseline cycle measurement (M7)
+
+The evaluator (`XmssAsm.runH`) executes the same `verifier` literal the theorem
+is about, counting every executed instruction (`steps`), the hash calls among
+them (`hashes`), and the synthetic total `ordinary + hashes * hashCost`. Run it
+with `scripts/test-differential.sh [hashCost]`.
+
+Every accepting run makes exactly **133 hash calls**, and this is forced by the
+scheme rather than by the corpus: 1 encoding, then `7 - x_i` steps for each of
+the 42 chains, which is `42 * 7 - 195 = 99` because an accepted encoding's
+digits sum to the target 195, then 1 leaf and 32 merkle. The instruction count
+varies only with the epoch, through the authentication path's swap branch.
+
+| build | accepting run | steps | ordinary | hashes |
+|---|---|---|---|---|
+| A (artifact) | epoch 0 | 4331 | 4198 | 133 |
+| A | epoch 1 | 4334 | 4201 | 133 |
+| A | epoch 2^31 | 4334 | 4201 | 133 |
+| A | epoch 2^32-1 | 4427 | 4294 | 133 |
+| A | random epochs | 4370-4379 | 4237-4246 | 133 |
+| B (hoisted chain walk) | epoch 0 | 3734 | 3601 | 133 |
+| B | epoch 2^32-1 | 3830 | 3697 | 133 |
+
+Rejecting runs cost between 47 steps (a padding bit set in the encoding digest,
+which stops before any chain work) and 4427 steps (a wrong root, which does all
+the work and fails the final compare).
+
+Per region, on the artifact:
+
+| region | steps | hashes |
+|---|---|---|
+| init (parameter, payload, encoding hash) | 44 | 1 |
+| decode, accepting | 222 | 0 |
+| decode, padding reject | 4-6 | 0 |
+| 42 chain walks (random digits) | 3970 | 150 |
+| leaf | 16 | 1 |
+| authentication path | 1090-1186 | 32 |
+| final compare | 9-11 | 0 |
+
+Synthetic totals for the artifact's epoch-0 accepting run: 4331 at
+`hashCost = 1`, 17498 at 100, 70698 at 500. The hash is the dominant cost for
+any realistic `hashCost`, which is why the count is fixed at 133 and the
+optimization work in M8 is about the 4198 ordinary instructions.
+
 ## Adversarial review of the statement (M1 acceptance)
 
 *Over-strong preconditions?*

@@ -98,6 +98,59 @@ hashes` and `cost = ordinary + hashes·hashCost`. Execution is input dependent
 bits), so a reported number always names its fixture; the benchmark path is
 "valid verification", whose hash count is the constant 133 = 1 + 99 + 1 + 32.
 
+## Region contracts (M2/M3)
+
+Every region theorem has the shape
+
+```
+CodeAt s.code (addr idxRegion) region 0 → Pre s → Runs H s Post
+```
+
+`Runs H s Q := ∃ s', Reaches H s s' ∧ Q s'` is total correctness under the
+hash-oracle stepper: termination is part of the claim. `CodeAt C base prog 0`
+says only that `prog` sits at `base`; it is discharged for the artifact by
+`decide +kernel` (`verifierCode_chainWalk`), so a region theorem never
+depends on the rest of the program, and callers compose regions with
+`Runs.bind`/`Runs.loop`.
+
+The chain walk (`XmssAsm/Regions/Chain.lean`) is the template:
+
+* `ChainWalkPre s P ep i x v`: `pc = addr idxChainWalk`, `x8 = ep`,
+  `x14 = x`, `x16 = 8 i`, `BUFA_P = P`, `CUR = v`.
+* `ChainWalkPost H s P ep i x v pcEnd s'`: `pc = pcEnd`, `x8 x13 x16 x18 x19`
+  unchanged, `BUFA_P = P`, `CUR = recoverChain P ep i x v` evaluated under `H`,
+  and `Frame WChain s s'` (`WChain` = tweak doublewords of `BUFA`, `CUR`,
+  `OUT`; every other memory cell and every register outside `CLOB` unchanged).
+
+Two implementations satisfy it, `chainWalkA_correct` and `chainWalkB_correct`.
+The artifact selects one through `chainWalk` (the program), `chainWalk_length`,
+`bOff_chainsLoop` (the loop branch offset that depends on it) and
+`chainWalk_correct` (the theorem callers use). Swapping is those four edits;
+it was done in both directions on 2026-09-17 with no other change.
+
+### Cycle counts of the chain walk
+
+`difftest` runs each implementation from a fresh entry state (starting digest
+0, epoch 0, chain 0) for every digit; `steps` counts executed instructions
+including the hash calls, `hashes` the hash calls among them.
+
+| digit `x` | hashes `7 - x` | A steps | B steps |
+|---|---|---|---|
+| 0 | 7 | 143 | 87 |
+| 1 | 6 | 123 | 76 |
+| 2 | 5 | 103 | 65 |
+| 3 | 4 | 83 | 54 |
+| 4 | 3 | 63 | 43 |
+| 5 | 2 | 43 | 32 |
+| 6 | 1 | 23 | 21 |
+| 7 | 0 | 3 | 10 |
+
+A is `3 + 20 (7 - x)` steps, B is `10 + 11 (7 - x)`. Whole-verifier accepting
+runs: A 4331-4427 steps, B 3734-3830 steps, both 133 hash calls; B is the
+better artifact by about 600 instructions and is a one-swap change. The
+artifact stays on A until the M7 theorem is closed, so the optimization can be
+exercised against the complete proof.
+
 ## Adversarial review of the statement (M1 acceptance)
 
 *Over-strong preconditions?*

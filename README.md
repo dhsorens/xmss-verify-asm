@@ -15,11 +15,15 @@ in the style of evm-asm, maybe using the refinement calculus and/or myreen decom
 
 ## Status
 
-M1 done: the contract is fixed (`docs/CONTRACT.md`), the RV64 verifier is
+M1-M3 done: the contract is fixed (`docs/CONTRACT.md`), the RV64 verifier is
 written (`XmssAsm/Program/Verifier.lean`, 185 instructions), it runs under
 the hash-oracle machine and agrees with `Concrete.verify` on the differential
 corpus (`scripts/test-differential.sh`). The correctness theorem is stated
-(`XmssAsm/Contract.lean`) and being proved. `PLAN.md` is the work queue.
+(`XmssAsm/Contract.lean`) and being proved region by region: the byte-level
+bridge and the symbolic-execution engine exist (`XmssAsm/Spec/Bytes.lean`,
+`XmssAsm/Machine/Sym.lean`), and the chain walk is proved for two
+interchangeable implementations (`XmssAsm/Regions/Chain.lean`). `PLAN.md` is
+the work queue.
 
 ## The stack
 

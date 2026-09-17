@@ -13,7 +13,31 @@ M1 done (2026-09-17): the contract is fixed (`docs/CONTRACT.md`,
 complete 185-instruction verifier exist, and the unproved program agrees with
 `Concrete.verify` on the 104-fixture end-to-end corpus
 (`scripts/test-differential.sh`). The correctness theorem is stated
-(`VerifierCorrect`) and not yet proved; M2-M7 are the proof.
+(`VerifierCorrect`) and being proved; M2-M7 are the proof.
+
+M2 done (2026-09-17): the hash call's semantic contract (`stepH_hash`,
+`stepH_hash_input`, `hashInputOf_eq`), the byte-level bridge from the spec's
+`tweakBytes`/payload bytes to the machine's doublewords
+(`XmssAsm/Spec/Bytes.lean`: `tweakBytes_chain/leaf/encoding/merkle`,
+`tweakableHashInput_eq`, `encodingPayload_eq`, `nodePayload_eq`,
+`leafPayload_eq`, `readWords_digests`), the symbolic-execution engine
+(`XmssAsm/Machine/Sym.lean`: `sym_*` steps, `sym_code` fetch facts,
+`sym_frame_W`), the evaluator with its cost model (`XmssAsm/Machine/Eval.lean`,
+`docs/CONTRACT.md`), and 14 executable bridge checks in `difftest`.
+
+M3 done (2026-09-17): `XmssAsm/Regions/Chain.lean` proves two chain-walk
+implementations (`chainWalkA`: reload constants per step, 22 instructions;
+`chainWalkB`: constants hoisted, 20 instructions) against one contract
+`ChainWalkPre → Runs H s (ChainWalkPost … pcEnd)`: `CUR = recoverChain P ep i x v`,
+caller registers kept, `P` untouched, frame `WChain` (tweak, `CUR`, `OUT`),
+termination built into `Runs`. Each theorem assumes only `CodeAt C
+(addr idxChainWalk) chainWalkX 0`, so the caller-facing theorem
+`chainWalk_correct` selects an implementation without touching any proof. The
+swap was performed (A→B→A): 4 declared edits (`chainWalk`, `chainWalk_length`,
+`bOff_chainsLoop`, `chainWalk_correct`), zero proof changes, build and suite
+green. Digits `0..7` are differentially tested for both implementations (336
+region cases, frame checked on the whole data layout); cycle counts are in
+`docs/CONTRACT.md`. Next: M4 (`Regions/Init.lean`, 42-chain loop, leaf).
 
 The project target is:
 

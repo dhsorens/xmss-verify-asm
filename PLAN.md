@@ -8,12 +8,12 @@ Dates are absolute. Today is 2026-09-17; the repository is still a scaffold.
 
 ## Where this is
 
-Scaffolded, not started. The four dependencies are pinned on one toolchain
-(Lean v4.33.0, Mathlib `db584cd6`), the axiom and forbidden-tactic gates are in
-place, and `XmssAsm/Smoke.lean` / `XmssAsm/Spec.lean` check that the machine
-side and the spec side are both reachable from one package.
-
-No verifier code has been written and no correctness theorem has been proved.
+M1 done (2026-09-17): the contract is fixed (`docs/CONTRACT.md`,
+`XmssAsm/Contract.lean`), the hash-oracle stepper, layout, evaluator and the
+complete 185-instruction verifier exist, and the unproved program agrees with
+`Concrete.verify` on the 104-fixture end-to-end corpus
+(`scripts/test-differential.sh`). The correctness theorem is stated
+(`VerifierCorrect`) and not yet proved; M2-M7 are the proof.
 
 The project target is:
 
@@ -1465,3 +1465,4 @@ These can be layered on later without changing the core verifier theorem if the 
 
 - 2026-09-15: **M0** scaffold builds warning-free; both gates pass; `XmssSecurity.Scheme` elaborates on Lean v4.33.0 / VCVio `3ecd5523`; dependencies pinned on one toolchain.
 - 2026-09-17: project direction clarified: pure virtual RV64, abstract hash oracle, direct memory-to-spec representation relation, proof-preserving optimization, deterministic cycle benchmark, reusable verified blocks, and no zkVM backend in the core project.
+- 2026-09-17: **M1** contract stated (`VerifierCorrect`, `docs/CONTRACT.md`): `HashContract H` as the stepper `stepH`, fixed dword layout, `Represents`, termination as `SyscallHalted`, `Frame InScratch`; theorem shape reviewed. Also landed early: the full verifier program (185 instructions), the evaluator/cycle counter, and the end-to-end differential harness (104 fixtures, all agree; accepting runs 4331-4427 steps incl. 133 hash calls).

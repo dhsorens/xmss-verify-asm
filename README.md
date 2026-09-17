@@ -15,9 +15,11 @@ in the style of evm-asm, maybe using the refinement calculus and/or myreen decom
 
 ## Status
 
-Scaffold only: builds warning-free, both gates pass, spec and machine reachable
-from one package. Nothing is implemented and nothing is proved. `PLAN.md` is
-the work queue and the list of open decisions; start there.
+M1 done: the contract is fixed (`docs/CONTRACT.md`), the RV64 verifier is
+written (`XmssAsm/Program/Verifier.lean`, 185 instructions), it runs under
+the hash-oracle machine and agrees with `Concrete.verify` on the differential
+corpus (`scripts/test-differential.sh`). The correctness theorem is stated
+(`XmssAsm/Contract.lean`) and being proved. `PLAN.md` is the work queue.
 
 ## The stack
 
@@ -64,10 +66,18 @@ comes from a precompile, is an open decision (`PLAN.md`).
 lakefile.toml             pins; comments say why each dependency and revision
 XmssAsm.lean              legacy root (see "module system" below)
 XmssAsm/Upstream.lean     module-system hub for the machine side (Decomp → riscv-zkvm)
+XmssAsm/Machine/          hash-oracle stepper, layout, symbolic-execution tactics, evaluator
+XmssAsm/Program/          the verifier as Program literals (the artifact)
+XmssAsm/Spec/             the upstream spec evaluated under a fixed oracle; byte lemmas
+XmssAsm/Represent.lean    memory represents (pk, ep, msg, sig); initState
+XmssAsm/Contract.lean     the theorem statement VerifierCorrect
+XmssAsm/Regions/          region contracts and their machine proofs
 XmssAsm/Smoke.lean        wiring check: a Program, cpsTotal and Nres all in scope
 XmssAsm/Spec.lean         imports XmssSecurity.Scheme and pins the names the bridge will use
+XmssAsmTests/             test hash, fixtures, differential harness (not trusted)
 XmssAsmTools/             the axiom gate (not imported by any theorem)
-scripts/                  check-axioms.sh, check-forbidden-tactics.sh
+scripts/                  check-axioms.sh, check-forbidden-tactics.sh, test-differential.sh
+docs/CONTRACT.md          the contract, layout, cost model, adversarial review
 PLAN.md                   the work queue and open decisions
 AGENTS.md                 standing rules
 ```

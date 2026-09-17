@@ -275,9 +275,25 @@ namespace XmssAsm
 
 /-! ## Index values, for the simp set -/
 
+/-! ### Where each region sits in the artifact
+
+One fact per region, all by kernel evaluation of `loadProgram CODE_BASE verifier`.
+These are the only facts about the whole program that the region proofs use. -/
+
+theorem verifierCode_init : CodeAt verifierCode CODE_BASE init 0 := by decide +kernel
+theorem verifierCode_decode : CodeAt verifierCode (addr idxDecode) decode 0 := by decide +kernel
+theorem verifierCode_chainsPre : CodeAt verifierCode (addr idxChains) chainsPre 0 := by decide +kernel
+theorem verifierCode_chainLoad : CodeAt verifierCode (addr idxChainsLoop) chainLoad 0 := by decide +kernel
+
 /-- The selected chain walk is where the verifier expects it. -/
 theorem verifierCode_chainWalk : CodeAt verifierCode (addr idxChainWalk) chainWalk 0 := by
   decide +kernel
+
+theorem verifierCode_chainsTail : CodeAt verifierCode (addr idxChainStore) chainsTail 0 := by
+  decide +kernel
+theorem verifierCode_leaf : CodeAt verifierCode (addr idxLeaf) leaf 0 := by decide +kernel
+theorem verifierCode_auth : CodeAt verifierCode (addr idxAuth) auth 0 := by decide +kernel
+theorem verifierCode_final : CodeAt verifierCode (addr idxFinal) final 0 := by decide +kernel
 
 theorem idxInitPayload_eq : idxInitPayload = 9 := by decide +kernel
 theorem idxInitHash_eq : idxInitHash = 28 := by decide +kernel

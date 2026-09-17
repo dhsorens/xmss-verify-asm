@@ -37,3 +37,4 @@ import XmssAsm.Regions.Auth
 import XmssAsm.Regions.Final
 import XmssAsm.Represent
 import XmssAsm.Contract
+import XmssAsm.Verify

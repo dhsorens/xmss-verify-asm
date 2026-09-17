@@ -13,6 +13,7 @@ import XmssAsm.Machine.Eval
 import XmssAsm.Regions.Chain
 import XmssAsm.Regions.Chains
 import XmssAsm.Regions.Leaf
+import XmssAsm.Regions.Decode
 import XmssAsm.Represent
 
 namespace XmssAsm.Tests
@@ -299,6 +300,87 @@ def leafCorpus : List LeafCase := Id.run do
     let e := if k == 0 then epochOf 0 else if k == 1 then epochOf (lifetime - 1) else ep
     out := out ++ [⟨s!"leaf.rnd{k}", P, e, ofList es numChains⟩]
   out := out ++ [⟨"leaf.zero", 0, epochOf 5, fun _ => 0⟩, ⟨"leaf.ones", allOnes, epochOf 5, fun _ => allOnes⟩]
+  return out
+
+/-! ## The decode region in isolation -/
+
+/-- A digest with the given 42 digits at the layout's offsets (padding bits clear). -/
+def digestOfDigits (f : Nat → Nat) : Digest :=
+  (List.range 42).foldl (fun (acc : BitVec 128) i =>
+    acc ||| (BitVec.ofNat 128 (f i % 8) <<< (3 * i + if i < 21 then 0 else 1))) (0 : BitVec 128)
+
+/-- `d` with bit `b` set. -/
+def setBit (d : Digest) (b : Nat) : Digest := d ||| ((1 : Digest) <<< b)
+
+structure DecodeCase where
+  name : String
+  d : Digest
+
+def decodeState (b : Build) (c : DecodeCase) : MachineState :=
+  let s : MachineState :=
+    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := b.code, pc := addr idxDecode }
+  (s.setReg .x20 (dLo c.d)).setReg .x21 (dHi c.d)
+
+def inWDecode (a : Word) : Bool := DIGITS.toNat ≤ a.toNat && a.toNat < DIGITS.toNat + 336
+
+/-- Run decode until it either reaches `idxChains` or halts. -/
+def runDecode (s : MachineState) : MachineState × Stats × Bool × Bool := Id.run do
+  let (s', st, reached) := runUntil H_test 1000 s (addr idxChains) {}
+  if reached then return (s', st, true, false)
+  -- not reached: it must have stopped at a halt
+  return (s', st, false, isHalted s')
+
+def checkDecode (b : Build) (c : DecodeCase) : Option String × Stats :=
+  let s := decodeState b c
+  let (s', st, accepted, halted) := runDecode s
+  let frameOk := layoutCells.all fun a => inWDecode a || s'.getMem a == s.getMem a
+  let clobOk := allRegs.all fun r => CLOB.contains r || s'.getReg r == s.getReg r
+  let x8Ok := s'.getReg .x8 == s.getReg .x8
+  let err :=
+    match TargetSum.decodeDigest c.d with
+    | some enc =>
+      let digitsOk := (List.range numChains).all fun j =>
+        s'.getMem (DIGITS + BitVec.ofNat 64 (8 * j)) ==
+          BitVec.ofNat 64 (enc ⟨j % numChains, Nat.mod_lt _ (by decide)⟩).val
+      if !accepted then some s!"{c.name}[{b.name}]: spec accepts, machine did not reach idxChains"
+      else if !digitsOk then some s!"{c.name}[{b.name}]: digit mismatch"
+      else none
+    | none =>
+      if accepted then some s!"{c.name}[{b.name}]: spec rejects, machine continued"
+      else if !halted then some s!"{c.name}[{b.name}]: spec rejects, machine did not halt (pc={s'.pc.toNat})"
+      else if s'.getReg .x10 != 0 then some s!"{c.name}[{b.name}]: reject with a0={(s'.getReg .x10).toNat}"
+      else none
+  let err := err <|> (if !frameOk then some s!"{c.name}[{b.name}]: memory outside DIGITS written"
+    else if !clobOk then some s!"{c.name}[{b.name}]: non-CLOB register written"
+    else if !x8Ok then some s!"{c.name}[{b.name}]: x8 clobbered" else none)
+  (err, st)
+
+/-- Digits summing to 195: 27 fives and 15 fours. -/
+def digits195 (i : Nat) : Nat := if i < 27 then 5 else 4
+def digits194 (i : Nat) : Nat := if i == 0 then 4 else digits195 i
+def digits196 (i : Nat) : Nat := if i == 41 then 5 else digits195 i
+/-- 195 with the extreme digits 7 and 0: 27 sevens, 6 ones, 9 zeros. -/
+def digitsEdge (i : Nat) : Nat := if i < 27 then 7 else if i < 33 then 1 else 0
+
+def decodeCorpus : List DecodeCase := Id.run do
+  let d195 := digestOfDigits digits195
+  let dEdge := digestOfDigits digitsEdge
+  let mut out : List DecodeCase :=
+    [⟨"decode.sum195", d195⟩, ⟨"decode.sum195.edge", dEdge⟩,
+     ⟨"decode.sum194", digestOfDigits digits194⟩, ⟨"decode.sum196", digestOfDigits digits196⟩,
+     ⟨"decode.sum195.bit63", setBit d195 63⟩, ⟨"decode.sum195.bit127", setBit d195 127⟩,
+     ⟨"decode.sum195.bits63.127", setBit (setBit d195 63) 127⟩,
+     ⟨"decode.zero", 0⟩, ⟨"decode.ones", allOnes⟩, ⟨"decode.all7", digestOfDigits fun _ => 7⟩,
+     ⟨"decode.all4", digestOfDigits fun _ => 4⟩]
+  let mut g : Rng := ⟨0xDEC0DE⟩
+  for k in List.range 6 do
+    let (d, g') := g.digest
+    g := g'
+    out := out ++ [⟨s!"decode.rnd{k}", d⟩]
+  -- the encoding digests of the valid end-to-end fixtures (accepting)
+  for f in corpus do
+    if f.name.startsWith "valid-" && !(f.name.any (· == '/')) then
+      out := out ++ [⟨s!"decode.{f.name}", evalD (Concrete.encodingHash f.pk.parameter f.ep f.msg f.sig.randomness)⟩]
   return out
 
 end XmssAsm.Tests

@@ -114,6 +114,16 @@ theorem valid_off8 (base : Word) (k : Nat) (h8 : base.toNat % 8 = 0) (hlo : 0x10
     isValidDwordAccess (base + BitVec.ofNat 64 k + 8#64) = true := by
   apply valid_of_range <;> simp only [BitVec.toNat_add, BitVec.toNat_ofNat] <;> omega
 
+theorem valid_off2 (base : Word) (k : Nat) (c : Word) (h8 : base.toNat % 8 = 0) (hc : c.toNat % 8 = 0)
+    (hlo : 0x10000 ≤ base.toNat) (hk : k % 8 = 0) (hhi : base.toNat + k + c.toNat < 0x10A20) :
+    isValidDwordAccess (base + BitVec.ofNat 64 k + c) = true := by
+  apply valid_of_range <;> simp only [BitVec.toNat_add, BitVec.toNat_ofNat] <;> omega
+
+/-- A valid access at `literal + ofNat k (+ literal)`. -/
+macro "sym_valid_off" : tactic =>
+  `(tactic| ((try sym_norm); apply XmssAsm.valid_of_range <;>
+      simp only [BitVec.toNat_add, BitVec.toNat_ofNat, Nat.reducePow, Nat.reduceMod] <;> omega))
+
 /-- Discharge `¬ a = b` between machine addresses of the form
     `literal + ofNat k (+ literal)` from the natural-number bounds in context;
     unlike `bv_omega` it only looks at the equation itself. -/

@@ -51,6 +51,19 @@ tests: 28 chains/leaf cases on both builds (all-0, all-7 and random digits;
 frame checked on the whole data layout). Chains region cycles (steps): A
 970 + 20·(hashes), B 1264 + 11·(hashes); leaf 16 steps, 1 hash.
 
+M5 done (2026-09-17): `XmssAsm/Spec/Decode.lean` relates the spec's
+`digestEncoding` to the machine's `(half >>> 3k) &&& 7` digits (`digit_lo`,
+`digit_hi`), the padding bits to the top bits of the halves (`pad63`,
+`pad127`), and the 21-step accumulator to `TargetSum.sum` (`sumTo_21`, via
+`Fin.sum_univ_eq_sum_range`/`Finset.sum_range_add`); `decodeDigest` is
+characterised case by case. `XmssAsm/Regions/Decode.lean` proves
+`decode_correct`: if `decodeDigest d = some enc` the region reaches `idxChains`
+with the 42 digits in `DIGITS`, else it halts at the reject stub with `a0 = 0`
+(`Rejected`: `SyscallHalted`, `stepH = none`), frame `DIGITS`. 50 decode
+region cases per build (sum 195 / 194 / 196, each padding bit, zero, ones,
+all-7, random, the valid fixtures' encoding digests). Decode costs 222 steps
+on accept, 4/6 on a padding reject, 223 on a sum reject.
+
 The project target is:
 
 > Produce pure RV64 bytecode implementing the XMSS verifier, prove it equivalent to the existing Lean specification, measure its virtual RV cycle count, and make the proof architecture robust enough that the bytecode can be aggressively optimized without rebuilding the high-level proof.

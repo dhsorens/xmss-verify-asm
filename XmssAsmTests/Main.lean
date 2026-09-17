@@ -9,7 +9,7 @@
 
 import XmssAsmTests
 
-open XmssAsm XmssAsm.Tests
+open XmssAsm XmssAsm.Tests XmssSecurity
 
 def main (args : List String) : IO UInt32 := do
   let hashCost := (args.head? >>= String.toNat?).getD defaultHashCost
@@ -55,6 +55,20 @@ def main (args : List String) : IO UInt32 := do
         if c.name == "leaf.rnd0" then
           IO.println s!"ok   {c.name}[{b.name}]: steps={st.steps} hashes={st.hashes} cost={st.cost hashCost}"
   IO.println s!"{nRegion} chains/leaf region cases run"
+  IO.println "-- component checks: decode region against decodeDigest, builds A and B"
+  let mut nDecode := 0
+  let mut nAccept := 0
+  for b in [buildA, buildB] do
+    for c in decodeCorpus do
+      nDecode := nDecode + 1
+      match checkDecode b c with
+      | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
+      | (none, st) =>
+        let acc := (TargetSum.decodeDigest c.d).isSome
+        if acc then nAccept := nAccept + 1
+        if b.name == "A" then
+          IO.println s!"ok   {c.name}: {if acc then "accept" else "reject"} steps={st.steps}"
+  IO.println s!"{nDecode} decode cases run ({nAccept} accepting)"
   IO.println "-- end-to-end corpus, artifact (implementation A)"
   let mut n := 0
   for f in corpus do
@@ -76,5 +90,5 @@ def main (args : List String) : IO UInt32 := do
       if r.a0 == 1 then
         IO.println s!"ok   [B] {f.name}: steps={r.stats.steps} hashes={r.stats.hashes} \
           ordinary={r.stats.ordinary} cost={r.stats.cost hashCost}"
-  IO.println s!"{n} fixtures (A), {nB} fixtures (B), {nChain} chain cases, {nRegion} chains/leaf cases, {componentChecks.length} bridge checks, {failures} failures"
+  IO.println s!"{n} fixtures (A), {nB} fixtures (B), {nChain} chain cases, {nRegion} chains/leaf cases, {nDecode} decode cases, {componentChecks.length} bridge checks, {failures} failures"
   return if failures = 0 then 0 else 1

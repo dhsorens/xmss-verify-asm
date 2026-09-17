@@ -30,12 +30,6 @@ theorem not_WChain_endpts (j : Nat) (hj : j < 42) :
     ¬ WChain (ENDPTS + BitVec.ofNat 64 (16 * j)) ∧ ¬ WChain (ENDPTS + BitVec.ofNat 64 (16 * j) + 8) := by
   simp only [WChain, InRange, not_or, BUFA, CUR, OUT, ENDPTS]; bv_omega
 
-/-- A valid access at `literal + ofNat k` or `literal + ofNat k + 8`. -/
-macro "sym_valid_off" : tactic =>
-  `(tactic| ((try sym_norm); first
-    | exact XmssAsm.valid_off _ _ (by decide) (by decide) (by omega) (by simp only [BitVec.reduceToNat]; omega)
-    | exact XmssAsm.valid_off8 _ _ (by decide) (by decide) (by omega) (by simp only [BitVec.reduceToNat]; omega)))
-
 /-- The loop invariant at the head of the chains loop after `i` chains (at
     `idxLeaf` once all 42 are done). -/
 def ChainsInv (H : HashInput → HashOutput) (s0 : MachineState) (P : PublicParameter) (ep : Epoch)

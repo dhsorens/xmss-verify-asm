@@ -39,6 +39,18 @@ green. Digits `0..7` are differentially tested for both implementations (336
 region cases, frame checked on the whole data layout); cycle counts are in
 `docs/CONTRACT.md`. Next: M4 (`Regions/Init.lean`, 42-chain loop, leaf).
 
+M4 done (2026-09-17): `XmssAsm/Regions/Init.lean` (`init_correct`: `P` into
+both buffers, encoding payload, encoding hash into `x20`/`x21`),
+`XmssAsm/Regions/Chains.lean` (`chains_correct`: the 42-chain loop as
+`Runs.loop` over an invariant on the `ENDPTS` slots, each iteration going
+through `chainWalk_correct` and nothing else about the walk), and
+`XmssAsm/Regions/Leaf.lean` (`leaf_correct`: the 704-byte leaf hash via
+`readWords_digests`/`leafPayload_eq`). The A→B→A swap was repeated with the
+chains loop as a real caller: build and suite green, no proof edited. Region
+tests: 28 chains/leaf cases on both builds (all-0, all-7 and random digits;
+frame checked on the whole data layout). Chains region cycles (steps): A
+970 + 20·(hashes), B 1264 + 11·(hashes); leaf 16 steps, 1 hash.
+
 The project target is:
 
 > Produce pure RV64 bytecode implementing the XMSS verifier, prove it equivalent to the existing Lean specification, measure its virtual RV cycle count, and make the proof architecture robust enough that the bytecode can be aggressively optimized without rebuilding the high-level proof.

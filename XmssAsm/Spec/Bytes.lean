@@ -22,7 +22,6 @@
 import XmssAsm.Machine.Hash
 import XmssAsm.Machine.Layout
 import XmssSecurity.Scheme
-import Mathlib.Tactic.FinCases
 
 namespace XmssAsm
 

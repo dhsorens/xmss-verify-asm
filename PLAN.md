@@ -818,7 +818,7 @@ Use the following checkpoints:
 | **M3** | two different `recoverChain` implementations can satisfy the same semantic contract without changing caller proofs |
 | **M5** | bit-level automation remains local and proof-check time is suitable for iteration |
 | **M7** | end-to-end theorem includes equivalence, termination, and frame behavior without depending unnecessarily on exact instruction layout |
-| **M8.a** | exactly one `Program` on main; cost function, hash pin, and stopping points frozen; `auth_steps` formula established; accept script measures that same value |
+| **M8.a** | exactly one `Program` on main; cost function, hash pin, and the semantic OTS cut frozen; `auth_steps` formula established; accept script checks statement integrity, the hash pin, OTS constancy, and a proof-time budget, and measures the proved `Program` |
 | **M8.b** | a land is a new record (`(OTS, XMSS_epmax) < baseline`) without weakening `VerifierCorrect` |
 | **M9** | `chainWalk` search with proof repair always allowed; frozen invariants; two-tier loop; passing the accept gate without a record is not an improvement |
 
@@ -1417,10 +1417,23 @@ constraint: hashes_OTS  = 101
 
 OTS means init + decode + 42 WOTS chains + leaf, stopping at `idxAuth`.
 That cut is part of the optimization contract: a candidate must not move
-work past `idxAuth` merely to shrink `OTS_steps`. The stopping point is
-immutable unless the metric is redesigned. OTS `steps` is constant on every
-accepting fixture: target-sum 195 forces 99 remaining chain hashes, plus 1
-encoding and 1 leaf.
+work past the cut merely to shrink `OTS_steps`.
+
+The cut is **semantic, not numeric**: it is the boundary after the leaf hash
+and before the first authentication instruction, however the program is
+renumbered. `idxAuth` is *not* a constant -- it is
+`idxLeaf + leaf.length`, so it moves whenever the chain walk's length moves,
+and M9 explicitly permits changing any index that is a function of that
+length. What is immutable is which work falls on each side of the boundary,
+not the number that names it.
+
+OTS `steps` is constant on every accepting fixture: target-sum 195 forces 99
+remaining chain hashes, plus 1 encoding and 1 leaf. That constancy is a
+property of the current program, not of every candidate -- a walk with a
+digit-dependent fast path would break it and make "an accepting path"
+ambiguous. The accept gate therefore **asserts** it: `OTS_steps` must agree
+across all accepting fixtures, and a candidate whose OTS cost varies by
+fixture fails the gate. This is why no held-out fixture corpus is needed.
 
 XMSS on `valid-epmax` is the worst-case accepting run. M8.a must prove or
 mechanically establish
@@ -1464,13 +1477,24 @@ fails the gate, even if the theorem holds.
 
 **Accept gate.** One script (`scripts/accept.sh` or equivalent):
 
-1. `lake build` (`xmss_verify_correct` typechecks);
-2. `scripts/check-axioms.sh` and `scripts/check-forbidden-tactics.sh`;
-3. `scripts/test-differential.sh` (the one program);
-4. dump `OTS_steps`, `XMSS_epmax_steps`, hash counts, and proof-check
+1. **statement integrity.** Check that the `VerifierCorrect` and
+   `Represents` definitions are byte-identical to their pinned form. A
+   weakened statement -- an added hypothesis, a dropped conjunct -- builds
+   cleanly, passes the axiom sweep, passes every fixture, and scores
+   better. Nothing else in this list catches it, so it is checked first;
+2. `lake build` (`xmss_verify_correct` typechecks), under a **wall-clock
+   budget**; exceeding the budget is a reject, not a slow pass. Proof-check
+   time is excluded from the score but bounded as a gate condition, because
+   a single candidate must not be able to stall the loop (R10);
+3. `scripts/check-axioms.sh` and `scripts/check-forbidden-tactics.sh`;
+4. `scripts/test-differential.sh` (the one program);
+5. assert the hash pin (`hashes_OTS = 101`, `hashes_XMSS = 133`) and assert
+   that `OTS_steps` is equal across all accepting fixtures;
+6. dump `OTS_steps`, `XMSS_epmax_steps`, hash counts, and proof-check
    time against a **machine-readable baseline** committed in-tree;
-5. exit non-zero on proof, test, hash-pin, or `m > baseline` failure;
-   exit 0 on gate pass; update the baseline file only on a new record.
+7. exit non-zero on statement, proof, timeout, test, hash-pin,
+   OTS-constancy, or `m > baseline` failure; exit 0 on gate pass; update
+   the baseline file only on a new record.
 
 The theorem and the evaluator consume the same `Program` value (R7).
 `lake exe cycles` is the region-split report (OTS vs Merkle); tighten it to
@@ -1491,7 +1515,15 @@ any of these is out of spec, not an optimization):
   full run on `valid-epmax` for XMSS);
 - hash counts remain pinned at 101 / 133;
 - only a strict metric improvement (`m < baseline`) updates the committed
-  baseline.
+  baseline;
+- the **scoreboard and the gate itself are not candidate material**: the
+  committed baseline file, `scripts/accept.sh`, `scripts/check-axioms.sh`,
+  `scripts/check-forbidden-tactics.sh`, `scripts/test-differential.sh` and
+  the fixture corpus are off limits to a candidate. Editing a number in the
+  baseline file is cheaper than weakening a proof, and step 6 writes to
+  that file; a denylist that protects the theorem but not the scoreboard is
+  exactly the mismatch R8 warns about. Only a human, in a separate commit,
+  changes the gate or the corpus.
 
 When whole-program optimization is later enabled, region boundaries and
 those stopping points stay immutable unless the metric is redesigned.
@@ -1529,7 +1561,11 @@ candidate can still land once the repaired proofs meet the bar above.
 - a machine-readable baseline is committed (OTS 2634 / 101 hashes; XMSS
   epmax 3830 / 133 hashes, after the collapse);
 - one accept command implements gate pass (`m ≤ baseline`) vs new record
-  (`m < baseline`), with hashes exact;
+  (`m < baseline`), with hashes exact, statement integrity checked
+  mechanically, `OTS_steps` asserted equal across accepting fixtures, and a
+  proof-check wall-clock budget enforced;
+- the baseline file, gate scripts, and fixture corpus are documented as
+  off limits to candidates;
 - a land re-establishes unchanged `xmss_verify_correct` for the measured
   `Program`; differential tests are not a substitute;
 - dual A/B builds, dual cycle reports, and `verifierB` are gone;
@@ -1570,6 +1606,16 @@ Track at least (report; only the frozen pair is the score):
 A new record *overwrites* the previous implementation. The previous record
 is the last commit and the old baseline line, not a retained alternate
 `Program`.
+
+**Instructive rejects are kept, as fixtures rather than as programs.** The
+no-alternates rule bans a live alternate `Program` that a caller could
+select; it does not ban recording what went wrong. A candidate that failed
+for a reason worth remembering -- lost termination, broke the hash pin,
+regressed the metric in a non-obvious way, needed proof repair above its
+region -- is recorded in `XmssAsmTests/Rejects.lean` as an instruction list
+plus the expected failure, and the suite asserts it still fails for that
+reason. Those lists are test data: nothing outside the reject suite may
+refer to them, and they are never reachable from `verifier`.
 
 The four swap sites (`chainWalk`, `chainWalk_length`, `bOff_chainsLoop`,
 `chainWalk_correct`) are the interface. Proof repair of the walk (and, if
@@ -1621,7 +1667,13 @@ proof repair that body needs. The untrusted optimizer may modify:
 
 It may **not** modify theorem *statements* (`VerifierCorrect`,
 `xmss_verify_correct`), specification code, representation predicates,
-hash semantics, or benchmark definitions. Restricting the *code* search
+hash semantics, or benchmark definitions. It may **not** touch the
+scoreboard or the gate: the committed baseline file, `scripts/accept.sh`,
+the two trust-gate scripts, `scripts/test-differential.sh`, or the fixture
+corpus. Lowering a baseline number is the cheapest cheat available and is
+easier than weakening a proof, so the boundary is enforced mechanically
+(the accept script rejects a candidate diff that touches any denied path)
+rather than assumed. Restricting the *code* search
 to `chainWalk` keeps failures local and interpretable and avoids
 conflating optimizer quality with whole-program proof-architecture
 issues. Do not open other regions, and do not enable whole-program
@@ -1682,7 +1734,16 @@ The harness records enough to reproduce every *new record*: the `Program`
 literal (or the commit that is that literal), the metric dump, proof-check
 time, and which baseline it beat. `main` remains the single best-known
 artifact. Git is the leaderboard. Do not keep losing or tied candidates
-in-tree.
+in-tree **as programs** -- but do record instructive rejects as fixtures in
+`XmssAsmTests/Rejects.lean` (see M8.b), which is test data and not a
+selectable implementation.
+
+Every candidate runs under a wall-clock budget for the proof check, and
+exceeding it is a reject. Proof-check time stays out of the score and in
+the record; the budget exists so one pathological candidate cannot stall
+the search. This codebase is sensitive to it: one authentication-path proof
+went from a hard timeout to nine seconds purely by changing when values
+were rewritten into the symbolic state.
 
 **Acceptance criteria:**
 
@@ -1691,10 +1752,15 @@ in-tree.
 - every land re-establishes unchanged `xmss_verify_correct` for the
   measured `Program`; differential tests are never a substitute;
 - proof, tests, and evaluator operate on the same candidate `Program`;
-- the mutation boundary is enforced: `chainWalk` plus mechanical
-  offsets/lengths plus local proof repair; no edits to theorem
-  statements, spec, representation, hash semantics, or benchmark
-  definitions;
+- the mutation boundary is enforced mechanically, by rejecting a candidate
+  diff that touches a denied path: `chainWalk` plus mechanical
+  offsets/lengths plus local proof repair are allowed; theorem statements,
+  spec, representation, hash semantics, benchmark definitions, the baseline
+  file, the gate scripts and the fixture corpus are not;
+- statement integrity is checked mechanically on every land, not assumed;
+- a proof-check wall-clock budget is enforced, and exceeding it rejects;
+- instructive rejects are recorded as fixtures, not as selectable
+  programs;
 - proof repair is always allowed; robustness (`simp` / `grind`, region
   insulation) is the iteration goal, not a code-only restriction;
 - accepted new records and measurements are reproducible, including

@@ -120,3 +120,8 @@ name = "XmssAsmTests"
 [[lean_exe]]
 name = "difftest"
 root = "XmssAsmTests.Main"
+
+# Region-by-region virtual-cycle breakdown, including the OTS subtotal.
+[[lean_exe]]
+name = "cycles"
+root = "XmssAsmTests.Cycles"

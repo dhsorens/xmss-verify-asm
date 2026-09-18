@@ -7,8 +7,9 @@
   Every `module` file here reaches those names through
   `public import XmssAsm.Upstream`.
 
-  `Refine` (lean-refine) is NOT here: that package is legacy, so it can only be
-  imported from a legacy file. `XmssAsm.Smoke` shows the pattern.
+  The specification is deliberately not re-exported: `xmss-security` is a
+  legacy package, so a file naming `XmssSecurity.*` cannot be a `module` and
+  imports the spec directly instead.
 -/
 
 module

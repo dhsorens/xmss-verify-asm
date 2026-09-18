@@ -33,13 +33,6 @@ name = "riscv-decomp"
 git = "https://github.com/dhsorens/riscv-decomp"
 rev = "main"
 
-# Lammich's refinement calculus (L3): the `nres` monad, `⇓R` data refinement,
-# the fuel-free `whileT` rule and the refinement rules. Mathlib-only.
-[[require]]
-name = "lean-refine"
-git = "https://github.com/dhsorens/lean-refine"
-rev = "main"
-
 # ---------------------------------------------------------------------------
 # The specification side, then Mathlib. ORDER MATTERS here; see `mathlib`.
 # ---------------------------------------------------------------------------
@@ -55,15 +48,17 @@ git = "https://github.com/leanEthereum/leanVM"
 subDir = "formal/xmss"
 rev = "b7a1072565e17a222e31924ff96f79a8e5cab458"
 
-# The spec's hash-oracle framework. leanVM's `formal/xmss` pins VCVio at
-# `cbd4144` (Lean v4.31.0). This is VCVio's first Lean v4.33.0 commit
-# (2026-08-21, "update to Lean 4.33"), whose Mathlib pin is the same sha as
-# `lean-refine`'s -- which is what lets the spec and the machine share one
-# toolchain. Lake takes the root's revision for a package over a dependency's,
-# so `xmss-security`'s own VCVio pin is overridden by this one, with a warning.
-# The RISK, recorded in PLAN.md: `XmssSecurity.Scheme` may not elaborate
-# against this newer VCVio. If it does not, the fallback is zip-2005-asm's
-# `spec/` sub-package on the upstream toolchain.
+# The spec's hash-oracle framework, and the reason the whole repository fits on
+# one toolchain. leanVM's `formal/xmss` pins VCVio at `cbd4144` (Lean v4.31.0);
+# this is VCVio's first Lean v4.33.0 commit (2026-08-21, "update to Lean 4.33"),
+# whose Mathlib pin is the v4.33.0 tag below. Lake takes the root's revision for
+# a package over a dependency's, so `xmss-security`'s own VCVio pin is
+# overridden by this one, with a warning.
+# Whether `XmssSecurity.Scheme` still elaborates against the newer VCVio is the
+# standing risk of this pin. It has, unchanged, since 2026-09-15, and every
+# build re-checks it. If a bump ever breaks it, the fallback is zip-2005-asm's
+# `spec/` sub-package on the upstream toolchain -- at the cost of a toolchain
+# split to reconcile before the top-level theorem can be stated.
 # Declared AFTER `xmss-security` so that VCVio's own transitive pins (PolyFun,
 # loom2) win over the spec package's older ones; see the ordering note on
 # `mathlib` below.
@@ -73,9 +68,9 @@ git = "https://github.com/Verified-zkEVM/VCVio.git"
 rev = "3ecd5523d5beaa10b026f663174e8b9d9708c24b"
 
 # Mathlib is required DIRECTLY, pinned, and LAST. Directly and pinned because
-# two dependencies want it (`lean-refine` and `VCVio`) and the root's pin is
-# what makes the resolution deterministic; v4.33.0 is the tag both resolve to
-# today (sha db584cd6), bump all three together. LAST because Lake resolves a
+# `VCVio` wants it transitively and the root's pin is what makes the resolution
+# deterministic; v4.33.0 is the tag both resolve to today (sha db584cd6), bump
+# them together. LAST because Lake resolves a
 # package that no require names -- Batteries, Aesop, Qq, ProofWidgets, ... --
 # from the manifest of the LAST dependency that mentions it, and the Mathlib
 # cache is only usable when those match Mathlib's own manifest exactly. The
@@ -92,8 +87,9 @@ rev = "v4.33.0"
 # Our libraries.
 # ---------------------------------------------------------------------------
 
-# The project proper: the implementation, its decompilation and its refinement
-# to the spec. `XmssAsm.+` picks up new modules without listing them.
+# The project proper: the verifier program, the region contracts and the
+# top-level correctness theorem. `XmssAsm.+` picks up new modules without
+# listing them.
 [[lean_lib]]
 name = "XmssAsm"
 globs = ["XmssAsm", "XmssAsm.+"]

@@ -106,7 +106,7 @@ is_denied() {
     XmssAsm/Machine/Eval.lean)       return 0 ;;
     XmssAsm/Machine/Cost.lean)       return 0 ;;
     XmssAsm/Spec.lean|XmssAsm/Spec/*) return 0 ;;
-    XmssAsm/Smoke.lean|XmssAsm/Upstream.lean) return 0 ;;
+    XmssAsm/Upstream.lean)           return 0 ;;
     XmssAsmTests/TestHash.lean)      return 0 ;;
     XmssAsmTests/Fixtures.lean)      return 0 ;;
     XmssAsmTests/Diff.lean)          return 0 ;;

@@ -48,7 +48,7 @@ WOTS chains, leaf); 133 abstract hash calls either way. `scripts/accept.sh`
 judges a change against `bench/baseline.txt`, and `scripts/autoresearch.sh`
 wraps it with the mutation boundary and a cheap pre-filter for candidates from
 an untrusted optimizer; `AUTORESEARCH.md` is the prompt for pointing an agent
-at that loop. `PLAN.md` is the work queue.
+at that loop. `ARCHITECTURE.md` is where to start on the repository itself.
 
 ## The stack
 
@@ -119,8 +119,8 @@ scripts/                  the gates: accept.sh and autoresearch.sh, and the four
 bench/                    the committed baseline, the pins and the records (the scoreboard)
 AUTORESEARCH.md           the prompt for running the optimization loop with an agent
 docs/CONTRACT.md          the contract, layout, cost model, optimization contract, adversarial review
-PLAN.md                   the work queue and open decisions
-AGENTS.md                 standing rules
+ARCHITECTURE.md           the decisions, the layering, and how to work here
+AGENTS.md                 standing rules, in short
 ```
 
 ## Build

@@ -1,5 +1,6 @@
 # SHA-256 of the output of `lake env ./.lake/build/bin/statementpin`: the
-# elaborated form of the frozen vocabulary (PLAN M8.a accept gate, step 1).
+# elaborated form of the frozen vocabulary, checked as step 1 of the accept
+# gate -- before anything expensive runs.
 #
 # NOT CANDIDATE MATERIAL. A weakened statement -- an added hypothesis on
 # `VerifierCorrect`, a dropped conjunct in `Represents`, a widened frame, a

@@ -89,7 +89,7 @@ is_allowed() {
     XmssAsm/Regions/Chain.lean)    return 0 ;;
     XmssAsm/Regions/Common.lean)   return 0 ;;   # shared bridging lemmas
     XmssAsm/Machine/Sym.lean)      return 0 ;;
-    README.md|PLAN.md|docs/*)      return 0 ;;   # documentation of a record
+    README.md|ARCHITECTURE.md|docs/*) return 0 ;;  # documentation of a record
     bench/records/*)               return 0 ;;   # gate output, not candidate input
     *) return 1 ;;
   esac

@@ -310,8 +310,7 @@ against 222 for `decode` alone.
 So reaching it needs more than the `chainWalk` search space: `decode` and the
 chain load/store overhead have to come down, and the per-step work has to
 approach the `ECALL`-plus-one-store floor. Opening those regions is a separate
-decision. The stopping points and the hash pin stay frozen either way, and
-`PLAN.md` has the same arithmetic under "Stretch target".
+decision. The stopping points and the hash pin stay frozen either way.
 
 **Not in the score:** reject-path cost, static instruction count, wall time,
 proof-check latency, input compression. Reject fixtures are a termination and

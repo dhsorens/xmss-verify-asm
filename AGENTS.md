@@ -1,7 +1,8 @@
 # Agent conventions — xmss-asm
 
-Standing rules. **Start at `PLAN.md`** each session: the queue and the open
-decisions. Neither it nor `README.md` is frozen.
+Standing rules, in short. **Start at `ARCHITECTURE.md`**: the decisions, the
+layering, what is frozen and how to work here. Neither it nor `README.md` is
+frozen.
 
 ## Ownership
 

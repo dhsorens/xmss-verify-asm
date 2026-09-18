@@ -15,21 +15,21 @@ def leg (s : MachineState) (idx : Nat) : MachineState × Nat × Nat × Bool :=
   let (s', st, ok) := runUntil H_test 100000 s (addr idx) {}
   (s', st.steps, st.hashes, ok)
 
-def report (f : Fixture) (b : Build) : IO Unit := do
-  let s0 := { initState f.pk f.ep f.msg f.sig with code := b.code }
+def report (f : Fixture) : IO Unit := do
+  let s0 := initState f.pk f.ep f.msg f.sig
   let (s1, i1, h1, k1) := leg s0 idxDecode
   let (s2, i2, h2, k2) := leg s1 idxChains
-  let (s3, i3, h3, k3) := leg s2 b.idxLeaf
-  let (s4, i4, h4, k4) := leg s3 b.idxAuth
-  let (s5, i5, h5, k5) := leg s4 b.idxFinal
+  let (s3, i3, h3, k3) := leg s2 idxLeaf
+  let (s4, i4, h4, k4) := leg s3 idxAuth
+  let (s5, i5, h5, k5) := leg s4 idxFinal
   let (_, st6, stop) := runH H_test verifierFuel s5 {}
   let ok := k1 && k2 && k3 && k4 && k5 && (stop == Stop.halted)
   let ots := i1 + i2 + i3 + i4
   let otsH := h1 + h2 + h3 + h4
   let tot := ots + i5 + st6.steps
   let totH := otsH + h5 + st6.hashes
-  let r := runFixtureWith b.code f
-  IO.println s!"{f.name} [{b.name}] boundaries-ok={ok} halted={r.halted} a0={r.a0.toNat}"
+  let r := runFixture f
+  IO.println s!"{f.name} boundaries-ok={ok} halted={r.halted} a0={r.a0.toNat}"
   IO.println s!"  init(encoding hash) {i1} steps {h1} hash"
   IO.println s!"  decode digits       {i2} steps {h2} hash"
   IO.println s!"  42 WOTS chains      {i3} steps {h3} hash"
@@ -47,7 +47,6 @@ def main : IO UInt32 := do
   for f in corpus do
     if f.expected then
       n := n + 1
-      for b in [buildA, buildB] do
-        report f b
-  IO.println s!"{n} accepting fixtures × 2 builds"
+      report f
+  IO.println s!"{n} accepting fixtures"
   return 0

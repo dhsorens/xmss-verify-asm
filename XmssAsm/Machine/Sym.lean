@@ -22,6 +22,7 @@
 module
 
 public import XmssAsm.Machine.Hash
+public import XmssAsm.Machine.Cost
 public import XmssAsm.Machine.Layout
 public import XmssAsm.Program.Verifier
 
@@ -164,6 +165,24 @@ macro "sym_hash_in" inp:term : tactic =>
 /-- Resolve a branch after `sym_plain` produced `Runs (if c then _ else _) Q`. -/
 macro "sym_branch" h:term : tactic =>
   `(tactic| (first | rw [if_pos $h] | rw [if_neg $h] | simp only [$h:term, ite_true, ite_false]))
+
+/-! ### Step-counted variants (`RunsN`), for cost proofs
+
+Identical to the `_f` steps above but through `RunsN.stepD`, so the goal's
+literal step count counts down as the proof advances. -/
+
+macro "symc_plain" hf:ident : tactic =>
+  `(tactic| (refine XmssAsm.RunsN.stepD (by decide) (XmssAsm.stepH_plain $hf (by decide) (by decide) (by decide)) ?_; sym_norm))
+macro "symc_ld" hf:ident : tactic =>
+  `(tactic| (refine XmssAsm.RunsN.stepD (by decide) (XmssAsm.stepH_ld $hf (by sym_valid)) ?_; sym_norm))
+macro "symc_sd" hf:ident : tactic =>
+  `(tactic| (refine XmssAsm.RunsN.stepD (by decide) (XmssAsm.stepH_sd $hf (by sym_valid)) ?_; sym_norm))
+macro "symc_ld_with" hf:ident h:term : tactic =>
+  `(tactic| (refine XmssAsm.RunsN.stepD (by decide) (XmssAsm.stepH_ld $hf $h) ?_; sym_norm))
+macro "symc_sd_with" hf:ident h:term : tactic =>
+  `(tactic| (refine XmssAsm.RunsN.stepD (by decide) (XmssAsm.stepH_sd $hf $h) ?_; sym_norm))
+macro "symc_hash" hf:ident : tactic =>
+  `(tactic| (refine XmssAsm.RunsN.stepD (by decide) (XmssAsm.stepH_hash $hf (by sym_norm <;> rfl) (by simp only [XmssAsm.hashArgsValid, XmssAsm.outBlockValid]; sym_norm <;> decide)) ?_; sym_norm))
 
 /-! ## Frame goals -/
 

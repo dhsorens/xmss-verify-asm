@@ -1,10 +1,11 @@
 /-
   XmssAsmTests.Main -- `lake exe difftest`
 
-  Runs the component suites (byte bridge, chain region for both
-  implementations), the end-to-end differential corpus on the artifact and on
-  the implementation-B build, and prints the cycle reports. Exit code 1 on
-  any disagreement.
+  Runs the component suites (byte bridge, chain, chains, leaf, decode and
+  auth regions), the cost cross-checks of PLAN M8.a (the proved auth-path
+  cost against the interpreter, the hash pins, and the constancy of the OTS
+  step count), and the end-to-end differential corpus, printing the cycle
+  reports. Exit code 1 on any disagreement.
 -/
 
 import XmssAsmTests
@@ -70,6 +71,33 @@ def main (args : List String) : IO UInt32 := do
     | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
     | (none, st) => IO.println s!"ok   {c.name}: steps={st.steps} hashes={st.hashes}"
   IO.println s!"{nAuth} auth cases run"
+  IO.println "-- cost checks: proved auth-path cost vs the interpreter (PLAN M8.a)"
+  let mut nCost := 0
+  for f in authCostCorpus do
+    nCost := nCost + 1
+    match checkAuthCost f with
+    | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
+    | (none, steps) =>
+      IO.println s!"ok   authcost {f.name}: {steps} steps = 1090 + 3 * popcount32 {f.ep.val}"
+  IO.println s!"{nCost} auth-cost cases run"
+  IO.println "-- cost checks: hash pins and OTS-step constancy (PLAN M8.a)"
+  for f in authCostCorpus do
+    match checkHashPin f with
+    | some msg => failures := failures + 1; IO.println s!"FAIL {msg}"
+    | none => pure ()
+  IO.println s!"ok   hash pin: {otsHashesPin} OTS / {xmssHashesPin} XMSS hashes \
+    on all {authCostCorpus.length} accepting fixtures"
+  match authCostCorpus.head? >>= otsSteps with
+  | none => failures := failures + 1; IO.println "FAIL ots-constancy: no accepting fixture ran"
+  | some ots =>
+    let mut const := true
+    for f in authCostCorpus do
+      if otsSteps f != some ots then
+        const := false
+        failures := failures + 1
+        IO.println s!"FAIL ots-constancy {f.name}: {otsSteps f} steps, expected {ots}"
+    if const then
+      IO.println s!"ok   OTS step count is {ots} on every accepting fixture"
   IO.println "-- end-to-end corpus"
   let mut n := 0
   for f in corpus do
@@ -81,5 +109,6 @@ def main (args : List String) : IO UInt32 := do
       IO.println s!"ok   {f.name}: a0={r.a0.toNat} steps={r.stats.steps} hashes={r.stats.hashes} \
         ordinary={r.stats.ordinary} cost={r.stats.cost hashCost}"
   IO.println s!"{n} fixtures, {nChain} chain cases, {nRegion} chains/leaf cases, \
-    {nDecode} decode cases, {nAuth} auth cases, {componentChecks.length} bridge checks, {failures} failures"
+    {nDecode} decode cases, {nAuth} auth cases, {nCost} cost cases, \
+    {componentChecks.length} bridge checks, {failures} failures"
   return if failures = 0 then 0 else 1

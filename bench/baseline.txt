@@ -31,6 +31,14 @@
 # `OTS_STEPS_DISTINCT` must be 1: OTS cost has to be the same on every
 # accepting fixture, or "OTS steps on an accepting path" is not well defined.
 #
+# `TARGET_OTS_STEPS` is the stretch target: what "really good" would look
+# like, recorded so it is not lost. It is NOT a gate condition and never
+# affects the verdict -- the gate is `m <= baseline`. The gate prints distance
+# to it. See PLAN.md ("Stretch target") for why 512 is hard: the 101 hash
+# ECALLs and roughly one tweak store per chain step are about 200 of it
+# already, so reaching it needs `decode` and the chain loop overhead to come
+# down too, which is beyond M9's `chainWalk`-only search space.
+#
 # Recorded but NOT scored: STATIC_INSTRUCTIONS (a tie-break at most),
 # AUTH_EPMAX_STEPS (a check on the cost theorem), proof-check wall clock (an
 # engineering constraint on autoresearch throughput, PLAN R10).
@@ -40,6 +48,7 @@
 #   M8.a collapse to one walk       OTS 2634, XMSS epmax 3830, static 183  987c48e
 #   M8.b hash output in place       OTS 2238, XMSS epmax 3434, static 179  2cc4ef0
 #   M9  rotated chain loop          OTS 2139, XMSS epmax 3335, static 179
+TARGET_OTS_STEPS=512
 OTS_STEPS=2139
 OTS_HASHES=101
 OTS_STEPS_DISTINCT=1

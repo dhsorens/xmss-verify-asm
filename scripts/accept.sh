@@ -234,6 +234,13 @@ printf '      %-22s %10s %10s\n' STATIC_INSTRUCTIONS \
 printf '      %-22s %10s %10s\n' AUTH_EPMAX_STEPS \
   "$(get AUTH_EPMAX_STEPS "$BASELINE")" "$(get AUTH_EPMAX_STEPS "$WORK/metrics.txt")"
 printf '      %-22s %10s %10s\n' PROOF_CHECK_SECONDS "(not scored)" "$PROOF_SECONDS"
+# The stretch target is a marker, never a gate condition: the verdict below
+# compares against the baseline and nothing else.
+TARGET="$(get TARGET_OTS_STEPS "$BASELINE")"
+if [ -n "$TARGET" ]; then
+  printf '      %-22s %10s %10s\n' TARGET_OTS_STEPS "$TARGET" \
+    "$(( C_OTS - TARGET )) to go"
+fi
 
 # Lexicographic comparison of m = (OTS_STEPS, XMSS_EPMAX_STEPS).
 if   [ "$C_OTS" -lt "$B_OTS" ]; then CMP=-1

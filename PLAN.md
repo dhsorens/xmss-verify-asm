@@ -1452,6 +1452,42 @@ anyway. `hashCost` stays as a reporting parameter; among candidates that
 meet the pin it does not change the ranking. At `hashCost = 1`,
 `cost = steps`.
 
+**Stretch target: `OTS_steps = 512`.** Recorded here as what "really good"
+would look like, not as a gate condition. The gate is `m <= baseline` and
+stays that way; 512 is a marker to aim at, and a candidate that misses it is
+not thereby a failure.
+
+It is a hard target, and worth writing down why, so that work aims at the
+right regions. The OTS path today is 2139 steps:
+
+```text
+  init (encoding hash)      43
+  decode digits            222
+  42 chain walks          1858
+  leaf hash                 16
+                          ----
+                          2139
+```
+
+and the 1858 breaks down as 42 x 20 chain-loop overhead (load 9, store 10,
+branch 1) + 42 x 10 walk prologue + 99 x 5 per-step work + 99 hash `ECALL`s
++ 4 for the loop header. So:
+
+- the 101 hash `ECALL`s of the OTS path are 101 steps that cannot go, since
+  the hash pin is an equality. That is a fifth of the target on its own;
+- each chain step must write a *different* tweak word (the position
+  changes), so roughly one store per step, ~99 more, is close to forced;
+- that leaves ~310 steps for everything else: reading 42 chain values,
+  extracting and target-sum-checking 42 digits, the leaf payload, and all
+  loop control. Decode alone is 222 today.
+
+Reaching 512 therefore needs more than the `chainWalk` search space M9 opens:
+`decode` and the chain load/store overhead have to come down too, and the
+per-step work has to approach the `ECALL`-plus-one-store floor. Opening those
+regions is a deliberate decision, not a consequence of this target -- M9's
+restriction to `chainWalk` stands until that loop has been run and reviewed,
+and the stopping points and hash pin stay frozen either way.
+
 Do **not** put in the score: reject-path cost, static instruction count,
 wall time, proof-check latency, or ots.golf compressions (this evaluator
 charges one unit per hash `ECALL` regardless of input length). Reject

@@ -290,6 +290,29 @@ satisfy `VerifierCorrect`; they fail the gate anyway. `hashCost` stays a
 reporting parameter: among candidates that meet the pin it cannot change the
 ranking.
 
+### What "really good" would look like
+
+`bench/baseline.txt` carries `TARGET_OTS_STEPS=512`: a stretch target, not a
+gate condition. The gate is `m <= baseline` and stays that way; the target is
+a marker to aim at, and the gate prints the distance to it.
+
+It is a hard target. The OTS path is 2139 steps today: 43 init, 222 decode,
+1858 for the 42 chain walks, 16 leaf. Inside those 1858 are 42 x 20 of
+chain-loop overhead (load 9, store 10, branch 1), 42 x 10 of walk prologue,
+99 x 5 of per-step work, 99 hash `ECALL`s and 4 for the loop header. Two parts
+of the 512 are close to forced: the 101 hash `ECALL`s on the OTS path cannot
+go, because the hash count is an equality pin, and each chain step has to
+write a different tweak word, so roughly one store per step. That is about 200
+before any other work, leaving ~310 for reading 42 chain values, extracting
+and target-sum-checking 42 digits, the leaf payload and all loop control --
+against 222 for `decode` alone.
+
+So reaching it needs more than the `chainWalk` search space: `decode` and the
+chain load/store overhead have to come down, and the per-step work has to
+approach the `ECALL`-plus-one-store floor. Opening those regions is a separate
+decision. The stopping points and the hash pin stay frozen either way, and
+`PLAN.md` has the same arithmetic under "Stretch target".
+
 **Not in the score:** reject-path cost, static instruction count, wall time,
 proof-check latency, input compression. Reject fixtures are a termination and
 fuel filter. Size is a tie-break at most. Proof-check time is recorded and

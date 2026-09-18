@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The autoresearch harness (PLAN M9): one command that evaluates a candidate
+# The autoresearch harness: one command that evaluates a candidate
 # patch to the chain walk end to end and answers yes/no plus numbers.
 #
 #   scripts/autoresearch.sh                 # judge the working tree, write nothing

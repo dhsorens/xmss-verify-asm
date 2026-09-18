@@ -484,7 +484,7 @@ best-so-far; a lower bound is a different project.
 * The hash oracle is universally quantified. A program that calls `H` on the
   wrong bytes, skips a call, or fabricates a digest cannot satisfy the equation
   for every `H`; a program that calls `H` *more* often can, and is caught by
-  the benchmark rather than the theorem (PLAN R8).
+  the benchmark rather than the theorem.
 * `stepH` traps on an out-of-range hash call, so termination forces every
   call's buffers to be valid memory.
 

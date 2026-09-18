@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The accept gate (PLAN M8.a). One command: the only path by which a candidate
+# The accept gate. One command: the only path by which a candidate
 # program may land on `main`.
 #
 #   scripts/accept.sh                # judge the working tree; never writes
@@ -27,7 +27,8 @@
 # THIS SCRIPT IS NOT CANDIDATE MATERIAL. Neither is `bench/baseline.txt`,
 # `bench/statement.sha256`, the other `scripts/check-*.sh`, or the fixture
 # corpus. A denylist that protects the theorem but not the scoreboard is the
-# mismatch PLAN R8 warns about. Only a human, in a separate commit, changes
+# wrong denylist -- editing a number here is cheaper than weakening a proof,
+# and step 6 writes to that file. Only a human, in a separate commit, changes
 # the gate.
 set -uo pipefail
 
@@ -38,8 +39,8 @@ BASELINE="bench/baseline.txt"
 PINFILE="bench/statement.sha256"
 # Wall-clock budget for the proof check, in seconds. Proof-check time is
 # excluded from the score but bounded as a gate condition: one candidate must
-# not be able to stall the autoresearch loop (PLAN R10). A from-scratch check
-# of this repository's own libraries takes ~30s, so this is ~20x headroom.
+# not be able to stall the search. A from-scratch check of this repository's
+# own libraries takes ~30s, so this is ~20x headroom.
 BUDGET="${ACCEPT_BUILD_BUDGET:-600}"
 
 RECORD=0
@@ -75,7 +76,7 @@ get() { grep -E "^$1=" "$2" 2>/dev/null | head -1 | cut -d= -f2-; }
 # `lake build <targets>` under the remaining wall-clock budget. Sets ELAPSED
 # and BUILD_RC, accumulates PROOF_SECONDS, and rejects on timeout: exceeding
 # the budget is a reject, not a slow pass, because one candidate must not be
-# able to stall the autoresearch loop (PLAN R10).
+# able to stall the search.
 PROOF_SECONDS=0
 timed_build() {
   local targets="$1" log="$2" remaining start
@@ -267,7 +268,7 @@ if [ "$RECORD" -eq 1 ]; then
   # Write the record before touching the baseline, so the file says which
   # baseline it beat. A record has to be reproducible from what is written
   # down: the commit, the tree state, the program listing, the metrics, the
-  # proof-check time and the statement pin (PLAN M9).
+  # proof-check time and the statement pin.
   mkdir -p bench/records
   REC="bench/records/$(date -u +%Y%m%dT%H%M%SZ)-ots${C_OTS}-xmss${C_XMSS}.txt"
   {

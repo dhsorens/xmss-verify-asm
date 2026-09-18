@@ -1,8 +1,9 @@
 /-
   XmssAsmTools.StatementPin -- statement integrity for the optimization gate.
 
-  The threat this closes (PLAN M8.a, step 1 of the accept gate). A candidate
-  that *weakens the statement* -- adds a hypothesis to `VerifierCorrect`,
+  The threat this closes, and why it runs before anything expensive. A
+  candidate that *weakens the statement* -- adds a hypothesis to
+  `VerifierCorrect`,
   drops a conjunct from `Represents`, widens the frame, moves an input
   address, or redefines what a hash `ECALL` does -- builds cleanly, passes the
   axiom sweep, passes every differential fixture, and scores better. Nothing

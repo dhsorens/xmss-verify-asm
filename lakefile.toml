@@ -114,8 +114,8 @@ name = "statementpin"
 root = "XmssAsmTools.StatementPin"
 supportInterpreter = true
 
-# The executable checks (PLAN E2/E3): test hash, fixtures, differential
-# harness, cycle report. Not imported by any theorem.
+# The executable checks: test hash, fixtures, differential harness, cycle
+# report. Not imported by any theorem.
 [[lean_lib]]
 name = "XmssAsmTests"
 
@@ -125,9 +125,9 @@ name = "XmssAsmTests"
 name = "difftest"
 root = "XmssAsmTests.Main"
 
-# The inner loop of the autoresearch harness (PLAN M9): interpreter-only
-# filters that build without any region proof, so a wrong candidate costs
-# seconds to reject. Never a merge gate.
+# The cheap tier of the autoresearch harness: interpreter-only filters that
+# build without any region proof, so a wrong candidate costs seconds to
+# reject. Never a merge gate.
 [[lean_exe]]
 name = "filter"
 root = "XmssAsmTests.Filter"

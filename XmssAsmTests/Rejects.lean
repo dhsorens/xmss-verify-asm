@@ -1,12 +1,12 @@
 /-
   XmssAsmTests.Rejects -- the reject archive.
 
-  From M8.a on there is one verifier program on `main`. The no-alternates rule
-  bans a live alternate `Program` a caller could select; it does not ban
-  recording what went wrong. A candidate that failed for a reason worth
-  remembering is kept here as an instruction list plus the failure it is
-  expected to produce, and this suite asserts it *still* fails for that reason
-  (PLAN M8.b).
+  There is one verifier program on `main`. The no-alternates rule bans a live
+  alternate `Program` a caller could select; it does not ban recording what
+  went wrong. A candidate that failed for a reason worth remembering is kept
+  here as an instruction list plus the failure it is expected to produce, and
+  this suite asserts it *still* fails for that reason -- so if a reject ever
+  starts passing, that is news, and the suite says so rather than going quiet.
 
   These lists are test data. Nothing outside this file refers to them, they are
   never reachable from `verifier`, and `verifierWithWalk` exists only here --

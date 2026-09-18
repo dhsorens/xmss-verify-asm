@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# The mutation boundary (PLAN M9), enforced rather than assumed.
+# The mutation boundary: what a candidate is allowed to have touched,
+# enforced rather than assumed.
 #
 # An untrusted optimizer proposes a patch. Lowering a number in the baseline
 # file is the cheapest cheat available -- cheaper than weakening a proof -- so

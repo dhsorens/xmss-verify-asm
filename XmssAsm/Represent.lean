@@ -10,8 +10,10 @@
   or the host-I/O fields: the theorem must hold for all of them.
 
   `initState` is what the differential tests use to build a machine from a
-  fixture; `initState_represents` is the check that the test harness and the
-  theorem agree on the representation (PLAN E2).
+  fixture, and `initState_represents` proves it satisfies `Represents`. Without
+  that theorem the harness could test a state the correctness theorem says
+  nothing about, and every fixture could pass while the theorem was vacuous
+  for the inputs anyone actually runs.
 
   Legacy file: it names `XmssSecurity.PublicKey` and friends.
 -/
@@ -50,10 +52,9 @@ def initState (pk : PublicKey) (ep : Epoch) (msg : Message) (sig : Signature) : 
 
 /-! ## `initState` satisfies `Represents`
 
-PLAN E2 asks the differential harness to build its machine state through the
-same representation the theorem assumes. It builds `initState`; the theorem
-assumes `Represents`. These lemmas are the bridge, so the harness cannot drift
-from the precondition of `xmss_verify_correct`. -/
+The harness builds `initState`; the theorem assumes `Represents`. These lemmas
+are the bridge, so the harness cannot drift from the precondition of
+`xmss_verify_correct`. -/
 
 /-- Addresses inside a doubleword block that does not wrap. -/
 theorem block_ne (a base : Word) (n : Nat) (hbase : base.toNat + 8 * n < 2 ^ 64)
@@ -227,9 +228,8 @@ theorem peel_param (s : MachineState) (ws : List Word) (a : Word) (h : a.toNat <
 
 /-! ### `initState` represents its inputs
 
-This is the bridge PLAN E2 asks for: the differential harness builds
-`initState`, the correctness theorem assumes `Represents`, and this theorem
-says they are the same thing. -/
+The differential harness builds `initState`, the correctness theorem assumes
+`Represents`, and this theorem says they are the same thing. -/
 
 theorem initState_code (pk : PublicKey) (ep : Epoch) (msg : Message) (sig : Signature) :
     (initState pk ep msg sig).code = verifierCode := by

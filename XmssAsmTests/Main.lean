@@ -1,11 +1,14 @@
 /-
   XmssAsmTests.Main -- `lake exe difftest`
 
-  Runs the component suites (byte bridge, chain, chains, leaf, decode and
-  auth regions), the cost cross-checks of PLAN M8.a (the proved auth-path
-  cost against the interpreter, the hash pins, and the constancy of the OTS
-  step count), and the end-to-end differential corpus, printing the cycle
+  Runs the component suites (byte bridge, chain, chains, leaf, decode and auth
+  regions), the cost cross-checks (the proved auth-path cost against the
+  interpreter, the hash pins, and the constancy of the OTS step count), the
+  reject archive, and the end-to-end differential corpus, printing the cycle
   reports. Exit code 1 on any disagreement.
+
+  Not trusted, and not a merge gate: the theorem is. The gate reads this
+  suite's exit code alongside a full proof check, never instead of one.
 -/
 
 import XmssAsmTests
@@ -71,7 +74,7 @@ def main (args : List String) : IO UInt32 := do
     | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
     | (none, st) => IO.println s!"ok   {c.name}: steps={st.steps} hashes={st.hashes}"
   IO.println s!"{nAuth} auth cases run"
-  IO.println "-- cost checks: proved auth-path cost vs the interpreter (PLAN M8.a)"
+  IO.println "-- cost checks: proved auth-path cost vs the interpreter"
   let mut nCost := 0
   for f in authCostCorpus do
     nCost := nCost + 1
@@ -80,7 +83,7 @@ def main (args : List String) : IO UInt32 := do
     | (none, steps) =>
       IO.println s!"ok   authcost {f.name}: {steps} steps = 1090 + 3 * popcount32 {f.ep.val}"
   IO.println s!"{nCost} auth-cost cases run"
-  IO.println "-- cost checks: hash pins and OTS-step constancy (PLAN M8.a)"
+  IO.println "-- cost checks: hash pins and OTS-step constancy"
   for f in authCostCorpus do
     match checkHashPin f with
     | some msg => failures := failures + 1; IO.println s!"FAIL {msg}"
@@ -98,7 +101,7 @@ def main (args : List String) : IO UInt32 := do
         IO.println s!"FAIL ots-constancy {f.name}: {otsSteps f} steps, expected {ots}"
     if const then
       IO.println s!"ok   OTS step count is {ots} on every accepting fixture"
-  IO.println "-- reject archive: recorded candidates must still fail (PLAN M8.b)"
+  IO.println "-- reject archive: recorded candidates must still fail"
   match rejectFixture with
   | none => failures := failures + 1; IO.println "FAIL reject archive: fixture valid-epmax is missing"
   | some rf =>

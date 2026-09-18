@@ -4,10 +4,12 @@
   The deterministic evaluator and cycle counter.
 
   It runs `stepH H` -- the very same transition function the correctness
-  theorem is stated over -- on the very same `verifier` program value, so the
-  program that is measured is the program that is proved (PLAN R7).
+  theorem is stated over -- on the very same `verifier` program value. That is
+  deliberate and it is the whole design: the evaluator takes no program
+  parameter, so it cannot be pointed at a candidate the theorem is not about,
+  and a measured number and a proved number always describe one artifact.
 
-  ## Cost model (PLAN "Benchmark model")
+  ## Cost model
 
       ordinary executed RV instruction = 1 virtual cycle
       abstract hash call (the HASH_ID ECALL) = `hashCost` virtual cycles

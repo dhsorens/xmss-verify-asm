@@ -13,10 +13,12 @@
        register and memory reads are `if`-chains that the same simp set
        decides for literal registers and literal addresses.
 
-  The simp set is `simp only` with an explicit list of lemmas and simprocs, so
-  proof-check time does not depend on the ambient simp set (PLAN R10). Every
-  lemma below is either a definitional unfolding of the machine model or a
-  literal-arithmetic simproc.
+  The simp set is `simp only` with an explicit list of lemmas and simprocs,
+  never a bare `simp`: proof-check time then does not drift with the ambient
+  simp set, which matters because the optimization loop pays for a full proof
+  check on every candidate under a wall-clock budget. Every lemma below is
+  either a definitional unfolding of the machine model or a literal-arithmetic
+  simproc.
 -/
 
 module

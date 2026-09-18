@@ -7,9 +7,9 @@
   `1090 + 3 * popcount32 ep` steps. That is a statement about the loaded
   program, so it is also a prediction about what the interpreter will count.
   This file runs each accepting fixture to the region boundaries and asserts
-  the two agree exactly, which is the cross-check PLAN M8.a asks for: a proof
-  and a measurement that can disagree, wired so that a disagreement fails the
-  suite.
+  the two agree exactly. The point is to keep a proof and a measurement that
+  *can* disagree, wired so that a disagreement fails the suite: a cost theorem
+  nothing executes is a theorem about a program no one measured.
 
   It also records the pinned hash counts. The benchmark's score is a step
   count; the hash count is an *equality* assertion, so a candidate that wins
@@ -50,7 +50,7 @@ def checkAuthCost (f : Fixture) : Option String × Nat :=
 /-- The accepting fixtures, with their epoch's population count. -/
 def authCostCorpus : List Fixture := corpus.filter (fun f => f.expected)
 
-/-! ## The pinned hash counts (PLAN M8.a)
+/-! ## The pinned hash counts
 
 These are equalities, not bounds. `otsHashes` is forced: one encoding hash,
 `42` chain-start hashes plus `99 - 42 = 57` further chain steps... in fact the
@@ -79,8 +79,10 @@ def checkHashPin (f : Fixture) : Option String :=
     else none
 
 /-- Steps up to the OTS cut: the quantity the benchmark's first component
-    scores. It must be the same for every accepting fixture (PLAN M8.a), since
-    the target sum forces the chain work. -/
+    scores. It must be the same for every accepting fixture -- the target sum
+    forces the chain work -- or "OTS steps on an accepting path" names no
+    single number and the primary score is not well defined. The gate asserts
+    it, which is why no held-out corpus is needed. -/
 def otsSteps (f : Fixture) : Option Nat :=
   let s0 := initState f.pk f.ep f.msg f.sig
   let (_, st, ok) := runUntil H_test legFuel s0 (addr idxAuth) {}

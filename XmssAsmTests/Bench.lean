@@ -1,8 +1,8 @@
 /-
   XmssAsmTests.Bench -- `lake exe bench`
 
-  The machine-readable metric dump the accept gate consumes (PLAN M8.a,
-  step 6). One `KEY=VALUE` line per metric, the same format as
+  The machine-readable metric dump the accept gate scores a candidate from.
+  One `KEY=VALUE` line per metric, the same format as
   `bench/baseline.txt`, so `scripts/accept.sh` can compare the two without a
   parser.
 
@@ -27,9 +27,9 @@ open XmssAsm XmssAsm.Tests RiscvZkvm.Rv64 XmssSecurity
     `XmssAsm.authSteps_lt_of_ne` shows is the unique maximum. -/
 def epmaxName : String := "valid-epmax"
 
-/-- The measured program, one instruction per line, for the record file: a
+/-- The measured program, one instruction per line, for the record file. A
     record has to be reproducible from what is written down, and the commit
-    plus this listing is that (PLAN M9). -/
+    plus this listing is that. -/
 def printProgram : IO Unit := do
   IO.println s!"# {verifier.length} instructions, loaded at CODE_BASE"
   let mut i := 0

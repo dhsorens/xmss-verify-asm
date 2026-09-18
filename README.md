@@ -39,7 +39,7 @@ Step counts are theorems too where they can be: the authentication path costs
 worst-case accepting epoch is `2^32 - 1` by proof rather than by sampling.
 
 Independently of the proof, the program is executed by an RV interpreter and
-compared with the specification on 104 end-to-end fixtures and 450 component
+compared with the specification on 104 end-to-end fixtures and 243 component
 cases (`scripts/test-differential.sh`), all passing.
 
 An accepting verification costs 3239 virtual cycles at epoch 0 and 3335 at the
@@ -48,7 +48,7 @@ WOTS chains, leaf); 133 abstract hash calls either way. `scripts/accept.sh`
 judges a change against `bench/baseline.txt`, and `scripts/autoresearch.sh`
 wraps it with the mutation boundary and a cheap pre-filter for candidates from
 an untrusted optimizer; `AUTORESEARCH.md` is the prompt for pointing an agent
-at that loop. `PLAN.md` is the work queue.
+at that loop. `ARCHITECTURE.md` is where to start on the repository itself.
 
 ## The stack
 
@@ -58,15 +58,22 @@ the spec swapped and, unlike there, one toolchain for both halves from day one.
 | layer | what | where | status |
 |---|---|---|---|
 | **L4** spec | `XmssSecurity.Concrete.verify`: `Ver(pk, ep, m, σ)` in a monad with a hash oracle | leanVM `formal/xmss`, pinned | upstream, imported verbatim |
-| **L3** algorithm | the verifier in `Nres`, its correctness, data refinement `⇓R` to a byte/limb representation | `lean-refine`; instance here | calculus upstream, **no instance** |
-| **L2** decompilation | RV64 code regions as tail-recursive functions + certificates | `riscv-decomp`; instance here | framework upstream, **no instance** |
+| **L3** algorithm | the verifier in `Nres`, its correctness, data refinement `⇓R` to a byte/limb representation | `lean-refine` | route **not taken** (see below) |
+| **L2** decompilation | RV64 code regions as tail-recursive functions + certificates | `riscv-decomp` | framework upstream; used for `Stepper`, `SyscallHalted` and the loop rules, not for decompilation |
 | **L1** program logic | separation-logic triples over the RV64 `Stepper` | `riscv-zkvm` / `riscv-decomp` | upstream |
 | **L0** machine | `decode` / `stepOn`, RV64IM, SP1 and ZisK backends | `riscv-zkvm` | upstream, trusted |
-| code | the RV64IM program itself | `XmssAsm/` | **none yet** |
+| code | the RV64IM program itself | `XmssAsm/Program/Verifier.lean` | **179 instructions, proved** |
 
-The join, `hnrAsm`-style, that lands an L3 refinement on an L2 `cpsTotal`
-belongs here (it names both a machine and a refinement, so neither dependency
-can host it). `zip-2005-asm/RefineAsm/Bridge.lean` is the precedent.
+**The L3/L2 route was considered and not taken.** The plan was an `hnrAsm`-style
+join landing an L3 refinement on an L2 `cpsTotal`, after
+`zip-2005-asm/RefineAsm/Bridge.lean`. What the proof does instead is state a
+contract per code region directly over the hash-oracle stepper and compose the
+six with `Runs.bind` (`XmssAsm/Regions/`, `XmssAsm/Verify.lean`). For a program
+this size that was the shorter path and it kept the region boundaries -- which
+is what the optimization loop needs -- sharper than a refinement chain would
+have. The consequence is that neither `Refine.Nres` nor `Decomp.cpsTotal` has
+an instance here, and `lean-refine` is no longer a dependency; re-adding it is
+one `[[require]]` block if a future L3 layer wants it.
 
 ## What the spec asks for
 
@@ -83,11 +90,14 @@ The spec is **oracle-parametric**: `verify` lives in any `m` with
 `HasQuery HashSpec m`. It never names a hash. leanVM's Rust fixes `H` to
 **BLAKE2s-256** (`crates/primitives/src/hash.rs`, `crates/xmss/src/hash.rs`),
 and a full verification is a constant **144 compressions** (2 encoding + 99
-chain + 11 leaf + 32 Merkle). An implementation has to pick a concrete `H`, and
-the correctness statement is then about `verify` instantiated at that `H`; the
+chain + 11 leaf + 32 Merkle).
+
+This project does not pick an `H`. `xmss_verify_correct` is universally
+quantified over it, so it holds at BLAKE2s-256 and at every other choice; the
+hash reaches the program through one `ECALL` contract and nothing below it is
+assumed. Proving BLAKE2s and implementing it in RV64IM are explicit non-goals, and the
 random-oracle security theorem stays upstream and is not this project's to
-re-prove. Which `H`, and whether BLAKE2s is implemented in RV64IM here or
-comes from a precompile, is an open decision (`PLAN.md`).
+re-prove.
 
 ## Layout
 
@@ -101,16 +111,16 @@ XmssAsm/Spec/             the upstream spec evaluated under a fixed oracle; byte
 XmssAsm/Represent.lean    memory represents (pk, ep, msg, sig); initState
 XmssAsm/Contract.lean     the theorem statement VerifierCorrect
 XmssAsm/Regions/          region contracts and their machine proofs
-XmssAsm/Smoke.lean        wiring check: a Program, cpsTotal and Nres all in scope
-XmssAsm/Spec.lean         imports XmssSecurity.Scheme and pins the names the bridge will use
+XmssAsm/Verify.lean       the six regions composed: xmss_verify_correct
+XmssAsm/Spec.lean         rename tripwire: names every upstream constant the proof uses
 XmssAsmTests/             test hash, fixtures, differential harness (not trusted)
 XmssAsmTools/             the axiom gate and the statement pin (not imported by any theorem)
-scripts/                  check-axioms.sh, check-forbidden-tactics.sh, test-differential.sh, accept.sh
-bench/                    the committed baseline and the pins (the scoreboard)
+scripts/                  the gates: accept.sh and autoresearch.sh, and the four checks they run
+bench/                    the committed baseline, the pins and the records (the scoreboard)
 AUTORESEARCH.md           the prompt for running the optimization loop with an agent
 docs/CONTRACT.md          the contract, layout, cost model, optimization contract, adversarial review
-PLAN.md                   the work queue and open decisions
-AGENTS.md                 standing rules
+ARCHITECTURE.md           the decisions, the layering, and how to work here
+AGENTS.md                 standing rules, in short
 ```
 
 ## Build
@@ -153,12 +163,12 @@ closure here excludes the generated Sail tree, so that part is fast.
 Everything is Lean **v4.33.0** and Mathlib **v4.33.0** (`db584cd6`). That took
 one non-obvious choice: leanVM pins `VCVio` at a Lean v4.31 commit, and this
 project instead requires VCVio's first v4.33.0 commit (`3ecd5523`, 2026-08-21),
-whose Mathlib pin coincides with `lean-refine`'s. Lake takes the root's revision
-of a package over a dependency's, so `xmss-security` is compiled against the
-newer VCVio, and `Scheme.lean` elaborates against it unchanged (checked
-2026-09-15; re-checked by every build). Had it not, the fallback was
-`zip-2005-asm`'s `spec/` sub-package on the upstream toolchain, at the cost of
-a split to reconcile before the bridging theorem could be stated.
+whose Mathlib pin is the v4.33.0 tag. Lake takes the root's revision of a
+package over a dependency's, so `xmss-security` is compiled against the newer
+VCVio, and `Scheme.lean` elaborates against it unchanged (checked 2026-09-15;
+re-checked by every build). Had it not, the fallback was `zip-2005-asm`'s
+`spec/` sub-package on the upstream toolchain, at the cost of a toolchain split
+to reconcile before the top-level theorem could be stated.
 
 `riscv-zkvm` is required at `sp1-backend`, not a tag, because `riscv-decomp`
 requires that branch and Lake keeps one revision per package.
@@ -173,11 +183,11 @@ Batteries that does not compile on 4.33.
 
 ## Module system
 
-`riscv-zkvm` and `riscv-decomp` are Lean `module`s; `lean-refine` and
-`xmss-security` are legacy packages, and a `module` cannot import a legacy
-file. So `XmssAsm/Upstream.lean` is a module (machine side only) and anything
-that names `Refine.*` or `XmssSecurity.*`, including the root, is a legacy
-file. The bridging theorem will be legacy until both upstreams migrate.
+`riscv-zkvm` and `riscv-decomp` are Lean `module`s; `xmss-security` is a legacy
+package, and a `module` cannot import a legacy file. So `XmssAsm/Upstream.lean`
+is a module (machine side only), and anything that names `XmssSecurity.*` --
+the spec bridge, the region proofs, `Verify.lean` and the root -- is a legacy
+file. That stays true until the upstream spec adopts the module system.
 
 ## Trust
 

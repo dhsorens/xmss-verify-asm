@@ -1,17 +1,18 @@
 # SHA-256 of the output of `lake exe bench --regions`: the instruction lists
-# of every region PLAN M9 freezes (init, decode, chainsPre, chainLoad,
+# of every region a candidate may not change (init, decode, chainsPre, chainLoad,
 # chainStore, leaf, authPre, authSelect, authHash, final).
 #
 # NOT CANDIDATE MATERIAL. It exists because the path-based mutation boundary is
 # coarser than the declared search space: `XmssAsm/Program/Verifier.lean` is an
 # allowed path, and it holds `chainStep` and `chainWalk` -- which a candidate
 # may change -- next to every other region's instruction list, which it may
-# not. This hash closes that gap at the granularity M9 actually declares.
+# not. This hash closes that gap at the granularity the search space is
+# actually declared in.
 #
 # `chainStep` and `chainWalk` are deliberately not covered. Neither are the
 # region indices, lengths or branch offsets, which are functions of the walk's
 # length and must move with it.
 #
 # Re-pinning is a human action, in its own commit, and means a region has been
-# opened to the search. Say so in `PLAN.md` in the same change.
+# opened to the search. Say so in `ARCHITECTURE.md` in the same change.
 10e5e963fafda1ca5526d3e3bb0043c48f4235a5122cecb3ede8dc088f33ef7d

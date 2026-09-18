@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# The mutation boundary (PLAN M9), enforced rather than assumed.
+# The mutation boundary: what a candidate is allowed to have touched,
+# enforced rather than assumed.
 #
 # An untrusted optimizer proposes a patch. Lowering a number in the baseline
 # file is the cheapest cheat available -- cheaper than weakening a proof -- so
@@ -88,7 +89,7 @@ is_allowed() {
     XmssAsm/Regions/Chain.lean)    return 0 ;;
     XmssAsm/Regions/Common.lean)   return 0 ;;   # shared bridging lemmas
     XmssAsm/Machine/Sym.lean)      return 0 ;;
-    README.md|PLAN.md|docs/*)      return 0 ;;   # documentation of a record
+    README.md|ARCHITECTURE.md|docs/*) return 0 ;;  # documentation of a record
     bench/records/*)               return 0 ;;   # gate output, not candidate input
     *) return 1 ;;
   esac
@@ -106,7 +107,7 @@ is_denied() {
     XmssAsm/Machine/Eval.lean)       return 0 ;;
     XmssAsm/Machine/Cost.lean)       return 0 ;;
     XmssAsm/Spec.lean|XmssAsm/Spec/*) return 0 ;;
-    XmssAsm/Smoke.lean|XmssAsm/Upstream.lean) return 0 ;;
+    XmssAsm/Upstream.lean)           return 0 ;;
     XmssAsmTests/TestHash.lean)      return 0 ;;
     XmssAsmTests/Fixtures.lean)      return 0 ;;
     XmssAsmTests/Diff.lean)          return 0 ;;

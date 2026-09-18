@@ -17,9 +17,10 @@
 
       auth_steps ep = 2 + 32 * 34 + 3 * popcount32 ep = 1090 + 3 * popcount32 ep
 
-  maximised, uniquely, at `ep = 2 ^ 32 - 1`. That is why the benchmark's
-  worst-case accepting XMSS fixture is `valid-epmax` (PLAN M8.a): it follows
-  from the program, rather than from the fixtures we happen to have.
+  maximised, uniquely, at `ep = 2 ^ 32 - 1` (`authSteps_lt_of_ne`). That is why
+  the benchmark's worst-case accepting fixture is `valid-epmax`: the worst case
+  follows from the program, so the secondary score is a real bound rather than
+  the largest number the corpus happens to contain.
 
   The invariant here is deliberately weaker than `AuthInv`: it pins the code,
   the pc and the three registers the control flow reads (`x8`, `x25`, `x26`),

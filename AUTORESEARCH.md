@@ -36,8 +36,9 @@ not, fix that first: the loop cannot tell a candidate's failure from a broken
 starting tree.
 
 Two costs worth knowing before you point an agent at this. On a warm tree the
-cheap filter is about 15 seconds and a full candidate judgement about 70, of
-which the proof check itself is a handful, so the loop is cheap to iterate. But
+cheap filter is about ten seconds and a full candidate judgement well under a
+minute, of which the proof check itself is a handful, so the loop is cheap to
+iterate. But
 the proof repair is where an agent will spend its time, and it is real Lean
 work on symbolic-execution proofs; budget accordingly.
 
@@ -66,7 +67,7 @@ is.
 > ```
 >
 > It runs three tiers in order: the mutation boundary, the cheap
-> interpreter-only filter (`lake exe filter`, about 15 seconds, builds none of
+> interpreter-only filter (`lake exe filter`, about ten seconds, builds none of
 > the region proofs), and the accept gate (`scripts/accept.sh`, the statement pin, the
 > proof check under a wall-clock budget, both trust gates, the differential
 > suite, the hash pin and the score). Exit 0 means gate pass. Read its output;

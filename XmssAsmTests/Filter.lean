@@ -1,5 +1,5 @@
 /-
-  XmssAsmTests.Filter -- `lake exe filter`, the inner loop of PLAN M9.
+  XmssAsmTests.Filter -- `lake exe filter`, the autoresearch loop's cheap tier.
 
   The cheap, untrusted filter. It runs the candidate program through the
   interpreter and rejects obvious losers *without* checking any proof: the
@@ -94,12 +94,12 @@ def filterOts (f : Fixture) : Option (Nat × Nat) :=
 
 /-! ## The region pin
 
-The regions PLAN M9 freezes. The path-based mutation boundary is coarser than
-the declared search space: `XmssAsm/Program/Verifier.lean` is an allowed path,
-and it holds `chainStep` and `chainWalk`, which a candidate may change, next to
-every other region's instruction list, which it may not. The boundary check
-hashes this listing against `bench/regions.sha256` to close that gap at the
-granularity M9 declares.
+The regions a candidate may not change. The path-based mutation boundary is
+coarser than the declared search space: `XmssAsm/Program/Verifier.lean` is an
+allowed path, and it holds `chainStep` and `chainWalk`, which a candidate may
+change, next to every other region's instruction list, which it may not. The
+boundary check hashes this listing against `bench/regions.sha256` to close that
+gap at the granularity the search space is actually declared in.
 
 It lives here rather than in `bench` because this module imports no region
 proof: the check has to work on a candidate whose proof is still broken, which
@@ -112,7 +112,7 @@ def frozenRegions : List (String × Program) :=
    ("authHash", authHash), ("final", final)]
 
 def printRegions : IO Unit := do
-  IO.println "# the regions PLAN M9 freezes; chainStep and chainWalk are the search space"
+  IO.println "# the frozen regions; chainStep and chainWalk are the search space"
   for (name, prog) in frozenRegions do
     IO.println s!"## {name}: {prog.length} instructions"
     let mut i := 0

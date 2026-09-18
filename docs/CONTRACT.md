@@ -348,6 +348,27 @@ proof, and step 6 writes to that file, so a denylist protecting the theorem
 but not the scoreboard is the wrong denylist. Only a human, in a separate
 commit, changes the gate or the corpus.
 
+### The reject archive
+
+`XmssAsmTests/Rejects.lean` keeps candidates that failed for a reason worth
+remembering, as an instruction list plus the failure they are expected to
+produce, and the differential suite asserts each still fails that way. The
+no-alternates rule bans a live alternate `Program` a caller could select; it
+does not ban recording what went wrong. Nothing outside that file refers to
+these lists and none is reachable from `verifier`.
+
+The entry that earns the archive its keep is `shortBound`: a chain bound of
+`8 i + 6` instead of `8 i + 7`, which stops each chain one step early. It is
+*faster on the score* -- 3209 steps against 3434 on `valid-epmax` -- and
+wrong. No step count rejects it. Only the exact hash pin does, which is why
+the pin is an equality rather than a bound. The other two entries record a
+lost exit test (the fuel filter's job) and a hoist of the position-dependent
+tweak store out of the loop (the differential suite's job).
+
+If a recorded reject ever *passes*, the suite fails: either the archive is
+stale, or something changed that makes the candidate viable, and it should be
+judged by the accept gate rather than left sitting here.
+
 **Proof repair is always permitted**, including of the affected region's proof
 file. A land is valid only if the repaired proofs re-establish the *same*
 local contracts and the *unchanged* `xmss_verify_correct` for the exact

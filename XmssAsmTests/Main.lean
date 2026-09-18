@@ -98,6 +98,17 @@ def main (args : List String) : IO UInt32 := do
         IO.println s!"FAIL ots-constancy {f.name}: {otsSteps f} steps, expected {ots}"
     if const then
       IO.println s!"ok   OTS step count is {ots} on every accepting fixture"
+  IO.println "-- reject archive: recorded candidates must still fail (PLAN M8.b)"
+  match rejectFixture with
+  | none => failures := failures + 1; IO.println "FAIL reject archive: fixture valid-epmax is missing"
+  | some rf =>
+    for r in rejects do
+      match checkReject r rf with
+      | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
+      | (none, st) =>
+        IO.println s!"ok   reject {r.name}: still fails as {repr r.kind} \
+          ({st.steps} steps, {st.hashes} hashes)"
+  IO.println s!"{rejects.length} archived rejects re-checked"
   IO.println "-- end-to-end corpus"
   let mut n := 0
   for f in corpus do
@@ -110,5 +121,6 @@ def main (args : List String) : IO UInt32 := do
         ordinary={r.stats.ordinary} cost={r.stats.cost hashCost}"
   IO.println s!"{n} fixtures, {nChain} chain cases, {nRegion} chains/leaf cases, \
     {nDecode} decode cases, {nAuth} auth cases, {nCost} cost cases, \
+    {rejects.length} archived rejects, \
     {componentChecks.length} bridge checks, {failures} failures"
   return if failures = 0 then 0 else 1

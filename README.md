@@ -42,8 +42,8 @@ Independently of the proof, the program is executed by an RV interpreter and
 compared with the specification on 104 end-to-end fixtures and 450 component
 cases (`scripts/test-differential.sh`), all passing.
 
-An accepting verification costs 3338 virtual cycles at epoch 0 and 3434 at the
-worst-case epoch, of which 2238 are the one-time signature (init, decode, 42
+An accepting verification costs 3239 virtual cycles at epoch 0 and 3335 at the
+worst-case epoch, of which 2139 are the one-time signature (init, decode, 42
 WOTS chains, leaf); 133 abstract hash calls either way. `scripts/accept.sh`
 judges a change against `bench/baseline.txt`. `PLAN.md` is the work queue; M9
 (the autoresearch harness) is what remains.

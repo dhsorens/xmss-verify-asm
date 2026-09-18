@@ -125,12 +125,17 @@ def chainStep : Program :=
   [.SLLI .x6 .x15 32, .ADDI .x6 .x6 0x100, .SD .x7 .x6 0, .ECALL, .ADDI .x15 .x15 1]
 
 /-- The chain walk: hoist the constants, set the position `8 i + x` and the
-    bound `8 i + 7`, then run a header-guarded loop of `chainStep`. -/
+    bound `8 i + 7`, guard the loop once, then run `chainStep` with the branch
+    at the bottom.
+
+    The guard is needed because digit 7 walks no steps at all. Everything after
+    it is a rotated loop: one conditional branch per iteration rather than a
+    branch at the top and a jump at the bottom. -/
 def chainWalk : Program :=
   [.LI .x7 BUFA, .LI .x5 HASH_ID, .LI .x10 BUFA, .LI .x11 48, .LI .x12 CUR,
    .SLLI .x6 .x8 32, .SD .x7 .x6 8, .ADD .x15 .x16 .x14, .ADDI .x17 .x16 7,
    .BGE .x15 .x17 (bOff (4 * (chainStep.length + 2)))] ++
-  chainStep ++ [.JAL .x0 (jOff (-(4 * (chainStep.length + 1))))]
+  chainStep ++ [.BLT .x15 .x17 (bOff (-(4 * chainStep.length)))]
 
 /-- Store `CUR` as endpoint `i`, advance the four loop registers. -/
 def chainStore : Program :=
@@ -220,7 +225,7 @@ theorem chainWalk_length : chainWalk.length = 16 := rfl
 
 theorem bOff_decodeLoop : BitVec.ofInt 13 (-(4 * decodeBody.length)) = BitVec.ofInt 13 (-36) := rfl
 theorem bOff_chainWalk : BitVec.ofInt 13 (4 * (chainStep.length + 2)) = BitVec.ofInt 13 28 := rfl
-theorem jOff_chainWalk : BitVec.ofInt 21 (-(4 * (chainStep.length + 1))) = BitVec.ofInt 21 (-24) := rfl
+theorem bOff_chainBack : BitVec.ofInt 13 (-(4 * chainStep.length)) = BitVec.ofInt 13 (-20) := rfl
 theorem bOff_chainsLoop : BitVec.ofInt 13 (-(4 * chainsBody.length)) = BitVec.ofInt 13 (-140) := rfl
 theorem bOff_authLoop : BitVec.ofInt 13 (-(4 * authBody.length)) = BitVec.ofInt 13 (-152) := rfl
 

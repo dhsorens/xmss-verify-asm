@@ -165,6 +165,15 @@ The executable frame check in `XmssAsmTests.Regions` is `decide` of these very
 predicates, not a hand-written copy: a copy drifts the first time a candidate
 changes a write set, and it drifts silently.
 
+One lesson from repairing this proof, since it cost an hour and will recur.
+The walk's loop is rotated, so `ChainInv` states its pc as
+`if k < 7 - x.val then <body> else <after the region>`. Putting that `if` in
+front of `sym_norm` costs a heartbeat timeout: the simp set tries to decide
+`0 < 7 - x.val` for a `Fin` projection. Resolve the `if` first
+(`rw [if_pos ...]`) and then normalise. The same shape with a plain variable
+bound, as in `AuthInv`'s `if L < 32`, does not trip it, which is what made it
+confusing.
+
 **One implementation satisfies it: `chainWalk_correct`.** The contract is
 reached through four declared swap sites -- `chainWalk` (the program),
 `chainWalk_length`, `bOff_chainsLoop` (the loop branch offset that depends on
@@ -186,20 +195,28 @@ hash calls, `hashes` the hash calls among them.
 
 | digit `x` | hashes `7 - x` | steps |
 |---|---|---|
-| 0 | 7 | 59 |
-| 1 | 6 | 52 |
-| 2 | 5 | 45 |
-| 3 | 4 | 38 |
-| 4 | 3 | 31 |
-| 5 | 2 | 24 |
-| 6 | 1 | 17 |
+| 0 | 7 | 52 |
+| 1 | 6 | 46 |
+| 2 | 5 | 40 |
+| 3 | 4 | 34 |
+| 4 | 3 | 28 |
+| 5 | 2 | 22 |
+| 6 | 1 | 16 |
 | 7 | 0 | 10 |
 
-That is `10 + 7 (7 - x)` steps: ten to hoist the constants and guard the loop,
-then a branch, four instructions and a jump per step. Its predecessors cost
-`10 + 11 (7 - x)` (the M8.a baseline, which copied the digest back into the
-payload slot) and `3 + 20 (7 - x)` (the M3 walk, which also rebuilt the
-constants inside the loop).
+That is `10 + 6 (7 - x)` steps: ten to hoist the constants and guard the loop
+once, then five instructions and one branch per step. The lineage, newest
+first:
+
+| walk | per digit | why it was replaced |
+|---|---|---|
+| rotated loop | `10 + 6 (7 - x)` | current |
+| header-guarded loop | `10 + 7 (7 - x)` | a branch *and* a jump per step |
+| copy through `OUT` | `10 + 11 (7 - x)` | copied the digest into the payload slot |
+| M3 walk | `3 + 20 (7 - x)` | also rebuilt the constants inside the loop |
+
+The guard cannot go: digit 7 walks no steps at all, and removing it loses
+termination. That candidate is in the reject archive.
 
 ## Baseline cycle measurement (M7)
 
@@ -216,14 +233,14 @@ varies only with the epoch, through the authentication path's swap branch.
 
 | accepting run | steps | ordinary | hashes |
 |---|---|---|---|
-| epoch 0 | 3338 | 3205 | 133 |
-| epoch 1 | 3341 | 3208 | 133 |
-| epoch 2^31 | 3341 | 3208 | 133 |
-| epoch 2^32-1 | 3434 | 3301 | 133 |
-| random epochs | 3377-3386 | 3244-3253 | 133 |
+| epoch 0 | 3239 | 3106 | 133 |
+| epoch 1 | 3242 | 3109 | 133 |
+| epoch 2^31 | 3242 | 3109 | 133 |
+| epoch 2^32-1 | 3335 | 3202 | 133 |
+| random epochs | 3278-3287 | 3145-3154 | 133 |
 
 Rejecting runs cost between 47 steps (a padding bit set in the encoding digest,
-which stops before any chain work) and 3434 steps (a wrong root, which does all
+which stops before any chain work) and 3335 steps (a wrong root, which does all
 the work and fails the final compare).
 
 Per region, on the artifact:
@@ -233,16 +250,16 @@ Per region, on the artifact:
 | init (parameter, payload, encoding hash) | 43 | 1 |
 | decode, accepting | 222 | 0 |
 | decode, padding reject | 4-6 | 0 |
-| 42 chain walks, accepting (digits sum to 195) | 1957 | 99 |
-| 42 chain walks, region test with random digits | 2314 | 150 |
+| 42 chain walks, accepting (digits sum to 195) | 1858 | 99 |
+| 42 chain walks, region test with random digits | 2164 | 150 |
 | leaf | 16 | 1 |
 | authentication path | 1090-1186 | 32 |
 | final compare | 9-11 | 0 |
 
-Synthetic totals for the epoch-0 accepting run: 3338 at `hashCost = 1`, 16505
-at 100, 69705 at 500. The hash is the dominant cost for any realistic
+Synthetic totals for the epoch-0 accepting run: 3239 at `hashCost = 1`, 16406
+at 100, 69606 at 500. The hash is the dominant cost for any realistic
 `hashCost`, which is why the count is fixed at 133 and the optimization work in
-M8 is about the 3205 ordinary instructions.
+M8 is about the 3106 ordinary instructions.
 
 ## The optimization contract (M8)
 

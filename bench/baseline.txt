@@ -38,12 +38,13 @@
 # Record history (git is the leaderboard; this is the short form):
 #   M7 baseline                     OTS 3231, XMSS epmax 4427, static 203
 #   M8.a collapse to one walk       OTS 2634, XMSS epmax 3830, static 183  987c48e
-#   M8.b hash output in place       OTS 2238, XMSS epmax 3434, static 179
-OTS_STEPS=2238
+#   M8.b hash output in place       OTS 2238, XMSS epmax 3434, static 179  2cc4ef0
+#   M9  rotated chain loop          OTS 2139, XMSS epmax 3335, static 179
+OTS_STEPS=2139
 OTS_HASHES=101
 OTS_STEPS_DISTINCT=1
 OTS_HASHES_DISTINCT=1
-XMSS_EPMAX_STEPS=3434
+XMSS_EPMAX_STEPS=3335
 XMSS_EPMAX_HASHES=133
 AUTH_EPMAX_STEPS=1186
 STATIC_INSTRUCTIONS=179

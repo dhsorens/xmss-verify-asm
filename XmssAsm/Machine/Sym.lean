@@ -81,7 +81,7 @@ macro "sym_norm" loc:(Lean.Parser.Tactic.location)? : tactic =>
       XmssAsm.idxChainWalk_eq, XmssAsm.idxChainStore_eq, XmssAsm.idxLeaf_eq, XmssAsm.idxAuth_eq,
       XmssAsm.idxAuthLoop_eq, XmssAsm.idxAuthHash_eq, XmssAsm.idxFinal_eq, XmssAsm.idxAccept_eq,
       XmssAsm.idxReject_eq, XmssAsm.idxEnd_eq, XmssAsm.chainWalk_length,
-      XmssAsm.bOff_decodeLoop, XmssAsm.bOff_chainWalk, XmssAsm.jOff_chainWalk,
+      XmssAsm.bOff_decodeLoop, XmssAsm.bOff_chainWalk, XmssAsm.bOff_chainBack,
       XmssAsm.bOff_chainsLoop, XmssAsm.bOff_authLoop,
       XmssAsm.jOff, XmssAsm.bOff, XmssAsm.imm, Int.reduceNeg,
       BitVec.add_zero,

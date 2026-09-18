@@ -27,7 +27,18 @@ open XmssAsm XmssAsm.Tests RiscvZkvm.Rv64 XmssSecurity
     `XmssAsm.authSteps_lt_of_ne` shows is the unique maximum. -/
 def epmaxName : String := "valid-epmax"
 
-def main : IO UInt32 := do
+/-- The measured program, one instruction per line, for the record file: a
+    record has to be reproducible from what is written down, and the commit
+    plus this listing is that (PLAN M9). -/
+def printProgram : IO Unit := do
+  IO.println s!"# {verifier.length} instructions, loaded at CODE_BASE"
+  let mut i := 0
+  for ins in verifier do
+    IO.println s!"{i} {repr ins}"
+    i := i + 1
+
+def main (args : List String) : IO UInt32 := do
+  if args.contains "--program" then printProgram; return 0
   let accepting := corpus.filter (fun f => f.expected)
   let mut errs : List String := []
   -- OTS leg: init + decode + 42 chains + leaf, stopping at the semantic cut

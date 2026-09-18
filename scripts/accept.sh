@@ -3,13 +3,18 @@
 # program may land on `main`.
 #
 #   scripts/accept.sh                # judge the working tree; never writes
-#   scripts/accept.sh --record       # ... and update the baseline on a record
+#   scripts/accept.sh --record       # ... update the baseline on a record and
+#                                    #     write bench/records/<...>
+#   scripts/accept.sh --base <ref>   # judge the diff against <ref> (default HEAD)
+#   scripts/accept.sh --no-boundary  # skip the mutation-boundary check: for a
+#                                    #     maintainer changing the gate itself,
+#                                    #     never for judging a candidate
 #   scripts/accept.sh --metrics-out F  # also write the metric dump to F
 #
 # Exit codes:
 #   0  gate pass  (m <= baseline; see below)
-#   1  REJECT     (statement, proof, timeout, warning, gate script, test,
-#                  hash pin, OTS constancy, or m > baseline)
+#   1  REJECT     (mutation boundary, statement, proof, timeout, warning, gate
+#                  script, test, hash pin, OTS constancy, or m > baseline)
 #   2  usage / environment error
 #
 # A gate pass with `m == baseline` is allowed and is NOT a record: a refactor
@@ -39,11 +44,15 @@ BUDGET="${ACCEPT_BUILD_BUDGET:-600}"
 
 RECORD=0
 METRICS_OUT=""
+BOUNDARY=1
+BASE="HEAD"
 while [ $# -gt 0 ]; do
   case "$1" in
     --record) RECORD=1 ;;
     --metrics-out) shift; METRICS_OUT="${1:-}" ;;
-    -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
+    --base) shift; BASE="${1:-}" ;;
+    --no-boundary) BOUNDARY=0 ;;
+    -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
     *) echo "accept: unknown argument '$1'" >&2; exit 2 ;;
   esac
   shift
@@ -101,6 +110,22 @@ no_warnings() {
 # 1. Statement integrity. First, because a weakened statement passes every
 #    other check in this script and scores better.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# 0. The mutation boundary. Before anything expensive, and before the pin:
+#    lowering a number in the baseline file is the cheapest cheat available,
+#    and the pin does not look at the baseline.
+# ---------------------------------------------------------------------------
+step "0/7 mutation boundary"
+if [ "$BOUNDARY" -eq 1 ]; then
+  scripts/check-mutation-boundary.sh --base "$BASE" > "$WORK/boundary.log" 2>&1
+  BRC=$?
+  sed 's/^/      /' "$WORK/boundary.log"
+  [ "$BRC" -eq 0 ] || reject "the candidate touched a frozen path (above)"
+else
+  printf '      SKIPPED by --no-boundary. This run does not judge a candidate:\n'
+  printf '      it is a maintainer changing the gate, the corpus or the pin.\n'
+fi
+
 step "1/7 statement integrity"
 # The pin reads the built oleans, so the library has to be current: hashing a
 # stale olean would let a weakened statement through, which is the one thing
@@ -229,6 +254,35 @@ if [ "$CMP" -eq 0 ]; then
 fi
 
 ok "NEW RECORD: ($C_OTS, $C_XMSS) < ($B_OTS, $B_XMSS)"
+if [ "$RECORD" -eq 1 ]; then
+  # Write the record before touching the baseline, so the file says which
+  # baseline it beat. A record has to be reproducible from what is written
+  # down: the commit, the tree state, the program listing, the metrics, the
+  # proof-check time and the statement pin (PLAN M9).
+  mkdir -p bench/records
+  REC="bench/records/$(date -u +%Y%m%dT%H%M%SZ)-ots${C_OTS}-xmss${C_XMSS}.txt"
+  {
+    printf '# xmss-asm record\n'
+    printf 'WHEN=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'COMMIT=%s\n' "$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+    if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+      printf 'TREE=dirty\n'
+      printf 'DIFF_SHA256=%s\n' \
+        "$( { git diff "$BASE"; git ls-files --others --exclude-standard; } \
+            | shasum -a 256 | cut -d' ' -f1)"
+    else
+      printf 'TREE=clean\n'
+    fi
+    printf 'BEAT_OTS_STEPS=%s\n' "$B_OTS"
+    printf 'BEAT_XMSS_EPMAX_STEPS=%s\n' "$B_XMSS"
+    printf 'PROOF_CHECK_SECONDS=%s\n' "$PROOF_SECONDS"
+    printf 'STATEMENT_PIN=%s\n' "$ACTUAL"
+    grep -vE '^#' "$WORK/metrics.txt"
+    printf -- '--- measured program ---\n'
+    lake exe bench --program
+  } > "$REC"
+  ok "record written to $REC"
+fi
 if [ "$RECORD" -eq 1 ]; then
   # Rewrite only the values, keeping the file's documentation.
   TMP="$WORK/baseline.new"

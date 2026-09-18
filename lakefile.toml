@@ -129,6 +129,13 @@ name = "XmssAsmTests"
 name = "difftest"
 root = "XmssAsmTests.Main"
 
+# The inner loop of the autoresearch harness (PLAN M9): interpreter-only
+# filters that build without any region proof, so a wrong candidate costs
+# seconds to reject. Never a merge gate.
+[[lean_exe]]
+name = "filter"
+root = "XmssAsmTests.Filter"
+
 # The machine-readable metric dump the accept gate compares against
 # `bench/baseline.txt`.
 [[lean_exe]]

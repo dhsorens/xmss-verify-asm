@@ -332,6 +332,46 @@ a measurement that disagree fail the suite.
 7. the verdict: non-zero on any failure above or on `m > baseline`, zero on a
    gate pass, and `--record` writes the baseline only on a record.
 
+### The autoresearch harness
+
+`scripts/autoresearch.sh` is the one command that judges a candidate patch to
+the chain walk. Three tiers, and the split is the point.
+
+1. **The mutation boundary**, `scripts/check-mutation-boundary.sh`. A
+   mechanical classification of the candidate's diff into allowed, repair and
+   denied. Allowed is the designated region and what moves with it:
+   `XmssAsm/Program/Verifier.lean` (the program, its length, the branch
+   offsets and the indices stated relative to that length),
+   `XmssAsm/Regions/Chain.lean`, `XmssAsm/Regions/Common.lean` and
+   `XmssAsm/Machine/Sym.lean` (whose simp set names the offset lemmas).
+   Denied is everything frozen: the statements, the specification, the
+   representation, the machine and oracle semantics, the benchmark
+   definitions, the fixture corpus, the baseline, the gate scripts and the
+   toolchain pins. Anything else is *repair above the region*: permitted --
+   the Lean kernel is the trust boundary, not the file list -- but reported,
+   because insulation is the iteration goal. This is checked first because
+   lowering a number in the baseline file is cheaper than weakening a proof,
+   and the statement pin does not look at the baseline.
+2. **The inner filter**, `lake exe filter`. The interpreter only: the chain
+   walk in isolation for every digit against `Concrete.recoverChain`, the
+   whole fixture corpus end to end, the hash pin, the score. It imports no
+   region proof, so it builds and runs while the candidate's proof is still
+   broken, and it rejects a wrong walk in about ten seconds. It is not a
+   merge gate. A green filter on a candidate whose `chainWalk_correct` does
+   not close is a reject.
+3. **The accept gate**, `scripts/accept.sh`, as above.
+
+A new record writes `bench/records/<when>-ots<n>-xmss<n>.txt`: the commit,
+whether the tree was dirty and if so the hash of its diff, the baseline it
+beat, the metric dump, the proof-check seconds, the statement-pin hash, and
+the measured program as an instruction listing. That is enough to reproduce
+the measurement from what is written down.
+
+The search space is `chainWalk` only. Restricting the code search keeps
+failures local and interpretable and avoids conflating optimizer quality with
+whole-program proof architecture. Other regions stay closed until this loop
+has been run and reviewed.
+
 ### Frozen; and off limits to a candidate
 
 Frozen (changing one is out of spec, not an optimization): the same canonical

@@ -127,10 +127,19 @@ scripts/accept.sh         # statement pin, proofs, gates, tests, hash pin, score
 ```
 
 It exits 0 on a gate pass and 1 on a reject, and prints the score against
-`bench/baseline.txt`. `lake exe bench` is the metric dump it consumes and
-`lake exe cycles` the region-by-region report. See "The optimization contract"
-in `docs/CONTRACT.md` for what is frozen, what is off limits to a candidate,
-and the difference between a gate pass and a new record.
+`bench/baseline.txt`. For a candidate from an untrusted optimizer, the command
+is one level up:
+
+```bash
+scripts/autoresearch.sh   # mutation boundary, cheap filter, then the gate
+```
+
+`lake exe filter` is the cheap tier on its own (the interpreter, no proofs, so
+it rejects a wrong chain walk in seconds), `lake exe bench` the metric dump the
+gate consumes, and `lake exe cycles` the region-by-region report. See "The
+optimization contract" in `docs/CONTRACT.md` for what is frozen, what is off
+limits to a candidate, and the difference between a gate pass and a new
+record.
 
 The first build also compiles `VCVio` and `XmssSecurity.Scheme` from source
 (no release oleans); `riscv-zkvm` builds from source too, but its import

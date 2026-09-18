@@ -63,7 +63,14 @@ def pinnedConsts : List Name :=
   -- the hash-oracle semantics
    `XmssAsm.HASH_ID, `XmssAsm.outWords, `XmssAsm.hashInputOf, `XmssAsm.outBlockValid,
    `XmssAsm.hashArgsValid, `XmssAsm.hashEffect, `XmssAsm.AtHashCall, `XmssAsm.stepH,
-   `XmssAsm.hashStepper, `XmssAsm.Reaches, `XmssAsm.Runs]
+   `XmssAsm.hashStepper, `XmssAsm.Reaches, `XmssAsm.Runs,
+  -- the benchmark: what the evaluator counts, what the fixtures expect, and the
+  -- claim the differential harness checks. These live on denied paths, but the
+  -- denylist is a diff check and this is the environment: a candidate that
+  -- reaches them some other way still has to match here.
+   `XmssAsm.runH, `XmssAsm.isHalted, `XmssAsm.isHashCall, `XmssAsm.Stats.cost,
+   `XmssAsm.staticInstructionCount, `XmssAsm.specVerify, `XmssAsm.specVerify_eq,
+   `XmssAsm.initState_verify]
 
 /-- Pretty-printer settings the pin is taken under. Fixed here so that a
     `set_option` elsewhere cannot change the hash. -/

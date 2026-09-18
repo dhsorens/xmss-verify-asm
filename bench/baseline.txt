@@ -1,0 +1,49 @@
+# xmss-asm benchmark baseline -- the committed scoreboard (PLAN M8.a).
+#
+# THIS FILE IS NOT CANDIDATE MATERIAL. A candidate program may not edit it,
+# and neither may `scripts/accept.sh`, the other gate scripts, or the fixture
+# corpus. Editing a number here is cheaper than weakening a proof, which is
+# exactly the mismatch PLAN R8 warns about. Only `scripts/accept.sh --record`,
+# on a measured new record, or a human in a separate commit, writes to it.
+#
+# Format: `KEY=VALUE`, one per line, the same format `lake exe bench` prints.
+#
+# The score is the lexicographic pair
+#
+#     m = (OTS_STEPS, XMSS_EPMAX_STEPS)
+#
+#   gate pass:  proofs + tests + exact hash pin  and  m <= baseline
+#   new record: gate pass  and  m < baseline
+#
+# OTS is init + decode + 42 WOTS chains + leaf, stopping at the *semantic* cut:
+# after the leaf hash, before the first authentication instruction. That
+# boundary is immutable; the index that names it (`idxAuth`) is not, since it
+# is `idxLeaf + leaf.length` and moves with the region lengths.
+#
+# XMSS is the full run on `valid-epmax`, the worst-case accepting epoch.
+# `XmssAsm.authSteps_lt_of_ne` proves that is the unique maximum: the
+# authentication path costs `1090 + 3 * popcount32 ep` steps.
+#
+# Hash counts are an exact pin, not a score term. A candidate that queries the
+# oracle fewer times is computing something else; it fails the gate rather
+# than setting a record.
+#
+# `OTS_STEPS_DISTINCT` must be 1: OTS cost has to be the same on every
+# accepting fixture, or "OTS steps on an accepting path" is not well defined.
+#
+# Recorded but NOT scored: STATIC_INSTRUCTIONS (a tie-break at most),
+# AUTH_EPMAX_STEPS (a check on the cost theorem), proof-check wall clock (an
+# engineering constraint on autoresearch throughput, PLAN R10).
+#
+# Set at commit 987c48e (M8.a collapse to the single hoisted chain walk).
+# Previous, pre-collapse: OTS_STEPS=3231, XMSS_EPMAX_STEPS=4427.
+OTS_STEPS=2634
+OTS_HASHES=101
+OTS_STEPS_DISTINCT=1
+OTS_HASHES_DISTINCT=1
+XMSS_EPMAX_STEPS=3830
+XMSS_EPMAX_HASHES=133
+AUTH_EPMAX_STEPS=1186
+STATIC_INSTRUCTIONS=183
+ACCEPTING_FIXTURES=8
+CORPUS_FIXTURES=104

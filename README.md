@@ -93,9 +93,10 @@ XmssAsm/Regions/          region contracts and their machine proofs
 XmssAsm/Smoke.lean        wiring check: a Program, cpsTotal and Nres all in scope
 XmssAsm/Spec.lean         imports XmssSecurity.Scheme and pins the names the bridge will use
 XmssAsmTests/             test hash, fixtures, differential harness (not trusted)
-XmssAsmTools/             the axiom gate (not imported by any theorem)
-scripts/                  check-axioms.sh, check-forbidden-tactics.sh, test-differential.sh
-docs/CONTRACT.md          the contract, layout, cost model, adversarial review
+XmssAsmTools/             the axiom gate and the statement pin (not imported by any theorem)
+scripts/                  check-axioms.sh, check-forbidden-tactics.sh, test-differential.sh, accept.sh
+bench/                    the committed baseline and statement pin (the scoreboard)
+docs/CONTRACT.md          the contract, layout, cost model, optimization contract, adversarial review
 PLAN.md                   the work queue and open decisions
 AGENTS.md                 standing rules
 ```
@@ -104,10 +105,23 @@ AGENTS.md                 standing rules
 
 ```bash
 lake exe cache get        # Mathlib oleans; without it, an hour
-lake build                # XmssAsm + XmssAsmTools
+lake build                # XmssAsm + XmssAsmTools + XmssAsmTests
 scripts/check-axioms.sh
 scripts/check-forbidden-tactics.sh
+scripts/test-differential.sh
 ```
+
+One command judges a change to the verifier program end to end:
+
+```bash
+scripts/accept.sh         # statement pin, proofs, gates, tests, hash pin, score
+```
+
+It exits 0 on a gate pass and 1 on a reject, and prints the score against
+`bench/baseline.txt`. `lake exe bench` is the metric dump it consumes and
+`lake exe cycles` the region-by-region report. See "The optimization contract"
+in `docs/CONTRACT.md` for what is frozen, what is off limits to a candidate,
+and the difference between a gate pass and a new record.
 
 The first build also compiles `VCVio` and `XmssSecurity.Scheme` from source
 (no release oleans); `riscv-zkvm` builds from source too, but its import

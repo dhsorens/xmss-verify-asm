@@ -137,34 +137,39 @@ The chain walk (`XmssAsm/Regions/Chain.lean`) is the template:
   and `Frame WChain s s'` (`WChain` = tweak doublewords of `BUFA`, `CUR`,
   `OUT`; every other memory cell and every register outside `CLOB` unchanged).
 
-Two implementations satisfy it, `chainWalkA_correct` and `chainWalkB_correct`.
-The artifact selects one through `chainWalk` (the program), `chainWalk_length`,
-`bOff_chainsLoop` (the loop branch offset that depends on it) and
-`chainWalk_correct` (the theorem callers use). Swapping is those four edits;
-it was done in both directions on 2026-09-17 with no other change.
+**One implementation satisfies it: `chainWalk_correct`.** The contract is
+reached through four declared swap sites -- `chainWalk` (the program),
+`chainWalk_length`, `bOff_chainsLoop` (the loop branch offset that depends on
+it) and `chainWalk_correct` (the theorem callers use) -- and that is the
+interface a candidate patches.
+
+During M3 the same contract was satisfied by two sequences, a straightforward
+walk and a hoisted one, swapped in both directions on 2026-09-17 with no other
+change. That was a proof-architecture checkpoint, not a shipping arrangement:
+it showed the boundary is real. M8.a collapsed it, because a live alternate
+`Program` a caller could select is exactly what makes "the program the theorem
+is about" ambiguous. Git history keeps the experiment; `main` does not.
 
 ### Cycle counts of the chain walk
 
-`difftest` runs each implementation from a fresh entry state (starting digest
-0, epoch 0, chain 0) for every digit; `steps` counts executed instructions
-including the hash calls, `hashes` the hash calls among them.
+`difftest` runs the walk from a fresh entry state (starting digest 0, epoch 0,
+chain 0) for every digit; `steps` counts executed instructions including the
+hash calls, `hashes` the hash calls among them.
 
-| digit `x` | hashes `7 - x` | A steps | B steps |
-|---|---|---|---|
-| 0 | 7 | 143 | 87 |
-| 1 | 6 | 123 | 76 |
-| 2 | 5 | 103 | 65 |
-| 3 | 4 | 83 | 54 |
-| 4 | 3 | 63 | 43 |
-| 5 | 2 | 43 | 32 |
-| 6 | 1 | 23 | 21 |
-| 7 | 0 | 3 | 10 |
+| digit `x` | hashes `7 - x` | steps |
+|---|---|---|
+| 0 | 7 | 87 |
+| 1 | 6 | 76 |
+| 2 | 5 | 65 |
+| 3 | 4 | 54 |
+| 4 | 3 | 43 |
+| 5 | 2 | 32 |
+| 6 | 1 | 21 |
+| 7 | 0 | 10 |
 
-A is `3 + 20 (7 - x)` steps, B is `10 + 11 (7 - x)`. Whole-verifier accepting
-runs: A 4331-4427 steps, B 3734-3830 steps, both 133 hash calls; B is the
-better artifact by about 600 instructions and is a one-swap change. The
-artifact stays on A until the M7 theorem is closed, so the optimization can be
-exercised against the complete proof.
+That is `10 + 11 (7 - x)` steps. The M3 walk it replaced cost
+`3 + 20 (7 - x)`, so the collapse was also worth about 600 instructions on a
+whole accepting run.
 
 ## Baseline cycle measurement (M7)
 
@@ -179,18 +184,16 @@ the 42 chains, which is `42 * 7 - 195 = 99` because an accepted encoding's
 digits sum to the target 195, then 1 leaf and 32 merkle. The instruction count
 varies only with the epoch, through the authentication path's swap branch.
 
-| build | accepting run | steps | ordinary | hashes |
-|---|---|---|---|---|
-| A (artifact) | epoch 0 | 4331 | 4198 | 133 |
-| A | epoch 1 | 4334 | 4201 | 133 |
-| A | epoch 2^31 | 4334 | 4201 | 133 |
-| A | epoch 2^32-1 | 4427 | 4294 | 133 |
-| A | random epochs | 4370-4379 | 4237-4246 | 133 |
-| B (hoisted chain walk) | epoch 0 | 3734 | 3601 | 133 |
-| B | epoch 2^32-1 | 3830 | 3697 | 133 |
+| accepting run | steps | ordinary | hashes |
+|---|---|---|---|
+| epoch 0 | 3734 | 3601 | 133 |
+| epoch 1 | 3737 | 3604 | 133 |
+| epoch 2^31 | 3737 | 3604 | 133 |
+| epoch 2^32-1 | 3830 | 3697 | 133 |
+| random epochs | 3773-3782 | 3640-3649 | 133 |
 
 Rejecting runs cost between 47 steps (a padding bit set in the encoding digest,
-which stops before any chain work) and 4427 steps (a wrong root, which does all
+which stops before any chain work) and 3829 steps (a wrong root, which does all
 the work and fails the final compare).
 
 Per region, on the artifact:
@@ -205,10 +208,123 @@ Per region, on the artifact:
 | authentication path | 1090-1186 | 32 |
 | final compare | 9-11 | 0 |
 
-Synthetic totals for the artifact's epoch-0 accepting run: 4331 at
-`hashCost = 1`, 17498 at 100, 70698 at 500. The hash is the dominant cost for
-any realistic `hashCost`, which is why the count is fixed at 133 and the
-optimization work in M8 is about the 4198 ordinary instructions.
+Synthetic totals for the epoch-0 accepting run: 3734 at `hashCost = 1`, 16901
+at 100, 70101 at 500. The hash is the dominant cost for any realistic
+`hashCost`, which is why the count is fixed at 133 and the optimization work in
+M8 is about the 3601 ordinary instructions.
+
+## The optimization contract (M8)
+
+From M8.a on, `main` is the single best-known artifact and Git history is the
+leaderboard. A candidate is a patch to that one program, never a second
+`Program` beside it.
+
+### The score
+
+```
+m = (OTS_steps, XMSS_epmax_steps)      lexicographic
+
+primary    OTS_steps          on an accepting path
+secondary  XMSS_steps         on fixture valid-epmax
+constraint hashes_OTS  = 101
+           hashes_XMSS = 133
+           E1 + E2 + E3 pass, xmss_verify_correct holds
+```
+
+`gate pass` is `m <= baseline`; `new record` is `m < baseline`. A gate pass at
+`m == baseline` is allowed -- a refactor or a proof cleanup should be landable
+-- and does not move the scoreboard. `m > baseline` fails the gate even when
+the theorem holds. Only a record may be called an improvement.
+
+**Hash counts are an exact pin, not a score term.** A candidate that queries
+the oracle fewer times is computing something else. Extra queries can still
+satisfy `VerifierCorrect`; they fail the gate anyway. `hashCost` stays a
+reporting parameter: among candidates that meet the pin it cannot change the
+ranking.
+
+**Not in the score:** reject-path cost, static instruction count, wall time,
+proof-check latency, input compression. Reject fixtures are a termination and
+fuel filter. Size is a tie-break at most. Proof-check time is recorded and
+budgeted, as an engineering constraint on autoresearch throughput, never as
+part of the verifier's performance.
+
+### The stopping points
+
+OTS is init + decode + 42 WOTS chains + leaf. Its stopping point is the
+**semantic** cut: after the leaf hash, before the first authentication
+instruction. `idxAuth` is the index that names that boundary today, but it is
+`idxLeaf + leaf.length` and therefore moves whenever a region's length moves,
+which a candidate is free to do. What is immutable is which work falls on
+each side. A candidate must not push work past the cut to shrink `OTS_steps`.
+
+`OTS_steps` is the same on every accepting fixture for this program, because
+target sum 195 forces 99 remaining chain hashes. That is a property of the
+program, not of the metric: a digit-dependent fast path would break it and
+leave "OTS steps on an accepting path" undefined. The gate therefore asserts
+it (`OTS_STEPS_DISTINCT = 1`), which is why no held-out corpus is needed.
+
+XMSS is the full run on `valid-epmax`. That fixture is the worst case as a
+**theorem**, not an observation: `XmssAsm.Regions.AuthCost` proves
+
+```
+authSteps ep = 1090 + 3 * popcount32 ep
+```
+
+with `popcount32 ep <= 32` and equality only at `ep = 2^32 - 1`
+(`authSteps_lt_of_ne`). The authentication path branches on exactly one thing,
+bit `L` of the epoch, which orders the two children in the merkle payload: 34
+steps per level with the bit clear, 37 with it set. `XmssAsmTests.Cost` checks
+the theorem against the interpreter on every accepting fixture, so a proof and
+a measurement that disagree fail the suite.
+
+### The accept gate
+
+`scripts/accept.sh` is the only path onto `main`. In order:
+
+1. **statement integrity** -- `lake env ./.lake/build/bin/statementpin` prints
+   the elaborated form of the frozen vocabulary (the statement, the input
+   representation, the layout, the hash-oracle semantics; see
+   `XmssAsmTools/StatementPin.lean`) and its hash must match
+   `bench/statement.sha256`. This is first because a weakened statement --
+   an added hypothesis, a dropped conjunct, a widened frame -- builds cleanly,
+   passes the axiom sweep, passes every fixture, and scores better. Nothing
+   else in the list catches it. `verifier`, `verifierCode` and the region
+   indices are deliberately *not* pinned: those are what a candidate changes;
+2. `lake build`, under a wall-clock budget (default 600s,
+   `ACCEPT_BUILD_BUDGET`); exceeding it is a reject, not a slow pass, and
+   warnings in our own modules are a reject too;
+3. `scripts/check-axioms.sh` and `scripts/check-forbidden-tactics.sh`;
+4. `scripts/test-differential.sh`;
+5. the exact hash pin, `OTS_STEPS_DISTINCT = 1`, and an unchanged corpus size;
+6. `lake exe bench` against `bench/baseline.txt`, with proof-check seconds
+   reported;
+7. the verdict: non-zero on any failure above or on `m > baseline`, zero on a
+   gate pass, and `--record` writes the baseline only on a record.
+
+### Frozen; and off limits to a candidate
+
+Frozen (changing one is out of spec, not an optimization): the same canonical
+`Program` is proved and measured; the `VerifierCorrect` statement; the machine
+and input representation; the hash-oracle semantics; the benchmark inputs and
+stopping points; the 101/133 hash pin; and the rule that only `m < baseline`
+moves the baseline.
+
+Off limits as *candidate material*: `bench/baseline.txt`,
+`bench/statement.sha256`, `scripts/accept.sh`, `scripts/check-axioms.sh`,
+`scripts/check-forbidden-tactics.sh`, `scripts/test-differential.sh`, and the
+fixture corpus. Editing a number in the baseline is cheaper than weakening a
+proof, and step 6 writes to that file, so a denylist protecting the theorem
+but not the scoreboard is the wrong denylist. Only a human, in a separate
+commit, changes the gate or the corpus.
+
+**Proof repair is always permitted**, including of the affected region's proof
+file. A land is valid only if the repaired proofs re-establish the *same*
+local contracts and the *unchanged* `xmss_verify_correct` for the exact
+`Program` the evaluator measured. A green differential suite is never a
+substitute for that theorem, and landing with `sorry` is out of spec.
+
+There is no theorem that a given `Program` is optimal. The loop is
+best-so-far; a lower bound is a different project.
 
 ## Adversarial review of the statement (M1 acceptance)
 

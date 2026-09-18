@@ -191,7 +191,7 @@ theorem verify_runs (H : HashInput → HashOutput) (pk : PublicKey) (ep : Epoch)
     obtain ⟨hhalt, hstop, hx10, hfr₆⟩ := h6
     exact ⟨hhalt, hstop, hx10, hS₅.trans (hfr₆.mono WNone_scratch)⟩
 
-/-- **The artifact is correct.** For every hash oracle `H`, the 185-instruction
+/-- **The artifact is correct.** For every hash oracle `H`, the 179-instruction
     RV64 program `verifier` loaded at `CODE_BASE`, started at `CODE_BASE` on any
     machine state whose memory represents `(pk, ep, msg, sig)`, halts with `a0`
     equal to the specification's `Ver(pk, ep, msg, sig)` evaluated at `H`, and

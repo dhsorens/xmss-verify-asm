@@ -15,13 +15,13 @@ in the style of evm-asm, maybe using the refinement calculus and/or myreen decom
 
 ## Status
 
-**M1-M7 complete: the verifier is proved.**
+**M1-M8 complete: the verifier is proved, and optimization is gated.**
 
 ```
 theorem xmss_verify_correct (H : HashInput → HashOutput) : VerifierCorrect H
 ```
 
-The artifact is `XmssAsm/Program/Verifier.lean`, 185 RV64IM instructions. The
+The artifact is `XmssAsm/Program/Verifier.lean`, 179 RV64IM instructions. The
 theorem (`XmssAsm/Verify.lean`) says that for every hash oracle `H`, starting
 from any machine state whose memory represents `(pk, ep, msg, sig)` with the
 program loaded at `CODE_BASE`, execution terminates in a halted state whose
@@ -31,13 +31,22 @@ and `Quot.sound` only.
 
 The proof is six region contracts composed with `Runs.bind`: init, decode,
 the 42-chain loop, leaf, the 32-level authentication path, and the final
-compare. The chain walk has two interchangeable implementations proved against
-one contract, and switching between them touches four definitions and no proof.
+compare. A chain-walk change touches four definitions -- the program, its
+length, one branch offset and one theorem -- and no proof above the region.
+
+Step counts are theorems too where they can be: the authentication path costs
+`1090 + 3 * popcount32 ep` steps (`XmssAsm/Regions/AuthCost.lean`), so the
+worst-case accepting epoch is `2^32 - 1` by proof rather than by sampling.
 
 Independently of the proof, the program is executed by an RV interpreter and
 compared with the specification on 104 end-to-end fixtures and 450 component
-cases (`scripts/test-differential.sh`), all passing. `PLAN.md` is the work
-queue; M8 (verified optimization) is what remains.
+cases (`scripts/test-differential.sh`), all passing.
+
+An accepting verification costs 3338 virtual cycles at epoch 0 and 3434 at the
+worst-case epoch, of which 2238 are the one-time signature (init, decode, 42
+WOTS chains, leaf); 133 abstract hash calls either way. `scripts/accept.sh`
+judges a change against `bench/baseline.txt`. `PLAN.md` is the work queue; M9
+(the autoresearch harness) is what remains.
 
 ## The stack
 

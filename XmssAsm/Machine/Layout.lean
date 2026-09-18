@@ -143,6 +143,13 @@ open RiscvZkvm.Rv64
 def InRange (lo : Word) (n : Nat) (a : Word) : Prop :=
   lo.toNat ≤ a.toNat ∧ a.toNat < lo.toNat + n
 
+/-- So that a region's write set can be *evaluated*, and the executable frame
+    check in `XmssAsmTests.Regions` can be derived from the very predicate the
+    region theorem uses rather than mirrored by hand. A hand-written mirror
+    drifts silently the first time a candidate changes a write set. -/
+instance InRange.decidable (lo : Word) (n : Nat) (a : Word) : Decidable (InRange lo n a) := by
+  unfold InRange; infer_instance
+
 /-- Every register the verifier may write. Everything else is preserved. -/
 def CLOB : List Reg :=
   [.x5, .x6, .x7, .x8, .x10, .x11, .x12, .x13, .x14, .x15, .x16, .x17, .x18, .x19,

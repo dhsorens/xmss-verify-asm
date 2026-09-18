@@ -44,6 +44,25 @@ The input bytes are read with the model's own `readBytes`, so the identity
 "48 doublewords in memory = these bytes" is a theorem about the model
 (`XmssAsm.Spec.Bytes`), not an assumption.
 
+### Overlapping input and output
+
+`hashEffect` reads the input from the pre-state and writes the output to the
+post-state, so `[x12, x12 + 32)` may overlap `[x10, x10 + x11)`. The chain
+walk relies on that: it sets `x12 = CUR = BUFA + 32`, the payload slot of its
+own hash input, so the oracle writes the next chain value straight into the
+slot the next step will hash, and the walk never copies the digest at all.
+That is four instructions per chain step, 396 over an accepting run.
+
+This is a property of the model, not a convention it inherited, so it is worth
+saying why it also holds of any implementation. A hash output depends on every
+input byte, so no correct implementation can emit an output byte before it has
+absorbed the whole input; read-then-write is forced. What remains is a *host*
+assumption: that the prover's hash syscall does not itself reject or mishandle
+an output buffer overlapping its input buffer. If a target host does, the fix
+is to tighten `hashArgsValid` to require disjointness -- which is a change to
+the frozen oracle semantics, hence a human decision, and it would retroactively
+reject this chain walk.
+
 ## Layout
 
 All input and scratch cells are doubleword-aligned literals in the legacy
@@ -134,8 +153,17 @@ The chain walk (`XmssAsm/Regions/Chain.lean`) is the template:
   `x14 = x`, `x16 = 8 i`, `BUFA_P = P`, `CUR = v`.
 * `ChainWalkPost H s P ep i x v pcEnd s'`: `pc = pcEnd`, `x8 x13 x16 x18 x19`
   unchanged, `BUFA_P = P`, `CUR = recoverChain P ep i x v` evaluated under `H`,
-  and `Frame WChain s s'` (`WChain` = tweak doublewords of `BUFA`, `CUR`,
-  `OUT`; every other memory cell and every register outside `CLOB` unchanged).
+  and `Frame WChain s s'` (`WChain` = the tweak doublewords of `BUFA` and the
+  32 bytes at `CUR`; every other memory cell and every register outside `CLOB`
+  unchanged). `CUR` for 32 rather than 16 bytes because the oracle's output
+  block lands there: the digest in the payload slot, its unused upper half in
+  `CUR2`. The walk does not touch `OUT` at all. Both are scratch, so
+  `Frame InScratch` at the top is unaffected, but a caller may not assume
+  `CUR2` survives a chain walk.
+
+The executable frame check in `XmssAsmTests.Regions` is `decide` of these very
+predicates, not a hand-written copy: a copy drifts the first time a candidate
+changes a write set, and it drifts silently.
 
 **One implementation satisfies it: `chainWalk_correct`.** The contract is
 reached through four declared swap sites -- `chainWalk` (the program),
@@ -158,18 +186,20 @@ hash calls, `hashes` the hash calls among them.
 
 | digit `x` | hashes `7 - x` | steps |
 |---|---|---|
-| 0 | 7 | 87 |
-| 1 | 6 | 76 |
-| 2 | 5 | 65 |
-| 3 | 4 | 54 |
-| 4 | 3 | 43 |
-| 5 | 2 | 32 |
-| 6 | 1 | 21 |
+| 0 | 7 | 59 |
+| 1 | 6 | 52 |
+| 2 | 5 | 45 |
+| 3 | 4 | 38 |
+| 4 | 3 | 31 |
+| 5 | 2 | 24 |
+| 6 | 1 | 17 |
 | 7 | 0 | 10 |
 
-That is `10 + 11 (7 - x)` steps. The M3 walk it replaced cost
-`3 + 20 (7 - x)`, so the collapse was also worth about 600 instructions on a
-whole accepting run.
+That is `10 + 7 (7 - x)` steps: ten to hoist the constants and guard the loop,
+then a branch, four instructions and a jump per step. Its predecessors cost
+`10 + 11 (7 - x)` (the M8.a baseline, which copied the digest back into the
+payload slot) and `3 + 20 (7 - x)` (the M3 walk, which also rebuilt the
+constants inside the loop).
 
 ## Baseline cycle measurement (M7)
 
@@ -186,32 +216,33 @@ varies only with the epoch, through the authentication path's swap branch.
 
 | accepting run | steps | ordinary | hashes |
 |---|---|---|---|
-| epoch 0 | 3734 | 3601 | 133 |
-| epoch 1 | 3737 | 3604 | 133 |
-| epoch 2^31 | 3737 | 3604 | 133 |
-| epoch 2^32-1 | 3830 | 3697 | 133 |
-| random epochs | 3773-3782 | 3640-3649 | 133 |
+| epoch 0 | 3338 | 3205 | 133 |
+| epoch 1 | 3341 | 3208 | 133 |
+| epoch 2^31 | 3341 | 3208 | 133 |
+| epoch 2^32-1 | 3434 | 3301 | 133 |
+| random epochs | 3377-3386 | 3244-3253 | 133 |
 
 Rejecting runs cost between 47 steps (a padding bit set in the encoding digest,
-which stops before any chain work) and 3829 steps (a wrong root, which does all
+which stops before any chain work) and 3434 steps (a wrong root, which does all
 the work and fails the final compare).
 
 Per region, on the artifact:
 
 | region | steps | hashes |
 |---|---|---|
-| init (parameter, payload, encoding hash) | 44 | 1 |
+| init (parameter, payload, encoding hash) | 43 | 1 |
 | decode, accepting | 222 | 0 |
 | decode, padding reject | 4-6 | 0 |
-| 42 chain walks (random digits) | 3970 | 150 |
+| 42 chain walks, accepting (digits sum to 195) | 1957 | 99 |
+| 42 chain walks, region test with random digits | 2314 | 150 |
 | leaf | 16 | 1 |
 | authentication path | 1090-1186 | 32 |
 | final compare | 9-11 | 0 |
 
-Synthetic totals for the epoch-0 accepting run: 3734 at `hashCost = 1`, 16901
-at 100, 70101 at 500. The hash is the dominant cost for any realistic
+Synthetic totals for the epoch-0 accepting run: 3338 at `hashCost = 1`, 16505
+at 100, 69705 at 500. The hash is the dominant cost for any realistic
 `hashCost`, which is why the count is fixed at 133 and the optimization work in
-M8 is about the 3601 ordinary instructions.
+M8 is about the 3205 ordinary instructions.
 
 ## The optimization contract (M8)
 

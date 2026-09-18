@@ -18,8 +18,18 @@ namespace XmssAsm
 
 open RiscvZkvm.Rv64 XmssSecurity
 
-/-- The write set of a chain walk: the tweak, `CUR`, and `OUT`. -/
-def WChain (a : Word) : Prop := InRange BUFA 16 a ∨ InRange CUR 16 a ∨ InRange OUT 32 a
+/-- The write set of a chain walk: the tweak doublewords of `BUFA`, and the
+    32 bytes at `CUR`.
+
+    `CUR` rather than `OUT` because the oracle now writes its output block
+    directly into the payload slot (`chainStep`), and 32 bytes rather than 16
+    because that block is a full hash output: the digest lands in the payload
+    slot and its unused upper half in `CUR2`. Both are scratch, so the
+    top-level `Frame InScratch` is unaffected, but this *is* a weaker frame at
+    `CUR2` than the copy-based walk gave, and callers may no longer assume
+    `CUR2` survives a chain walk (none does; the auth region writes it itself).
+    Correspondingly the walk no longer touches `OUT` at all. -/
+def WChain (a : Word) : Prop := InRange BUFA 16 a ∨ InRange CUR 32 a
 
 /-- Loop registers of the caller a chain walk leaves alone. -/
 def ChainKeep (s0 s : MachineState) : Prop :=
@@ -51,7 +61,7 @@ def ChainInv (H : HashInput → HashOutput) (s0 : MachineState) (P : PublicParam
     (ep : Epoch) (ci : ChainIndex) (x : Digit) (v : Digest) (k : Nat) (s : MachineState) : Prop :=
   s.code = s0.code ∧ s.pc = addr (idxChainWalk + 9) ∧
   s.getReg .x7 = BUFA ∧ s.getReg .x5 = HASH_ID ∧ s.getReg .x10 = BUFA ∧ s.getReg .x11 = 48#64 ∧
-  s.getReg .x12 = OUT ∧
+  s.getReg .x12 = CUR ∧
   s.getReg .x8 = BitVec.ofNat 64 ep.val ∧ s.getReg .x16 = BitVec.ofNat 64 (8 * ci.val) ∧
   s.getReg .x15 = BitVec.ofNat 64 (8 * ci.val + x.val + k) ∧
   s.getReg .x17 = BitVec.ofNat 64 (8 * ci.val + 7) ∧
@@ -103,10 +113,9 @@ theorem chainStep_body (H : HashInput → HashOutput) (s0 : MachineState)
   subst hpc
   rw [← hcode] at hC
   sym_code hC [chainWalk] [chainStep]
-  obtain ⟨f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16, f17, f18, f19,
-    -⟩ := hC
+  obtain ⟨f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, -⟩ := hC
   have hR : R = fun r => if r = .x7 then BUFA else if r = .x5 then HASH_ID else
-      if r = .x10 then BUFA else if r = .x11 then 48#64 else if r = .x12 then OUT else R r := by
+      if r = .x10 then BUFA else if r = .x11 then 48#64 else if r = .x12 then CUR else R r := by
     funext r
     split_ifs <;> subst_vars <;> first | exact h7 | exact h5 | exact h10 | exact h11 | exact h12 | rfl
   have hx : x.val + k < 7 := by omega
@@ -125,8 +134,7 @@ theorem chainStep_body (H : HashInput → HashOutput) (s0 : MachineState)
     simp only [MachineState.readWords_succ, MachineState.readWords_zero]
     sym_norm
     simp only [h15, hP.1, hP.2, hcur.1, hcur.2, htw, tw0_machine', Nat.add_assoc]
-  sym_ld_f f14; sym_ld_f f15; sym_sd_f f16; sym_sd_f f17
-  sym_plain_f f18; sym_plain_f f19
+  sym_plain_f f14; sym_plain_f f15
   refine Runs.done ⟨hcode, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · sym_norm
   · sym_norm

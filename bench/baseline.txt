@@ -35,15 +35,17 @@
 # AUTH_EPMAX_STEPS (a check on the cost theorem), proof-check wall clock (an
 # engineering constraint on autoresearch throughput, PLAN R10).
 #
-# Set at commit 987c48e (M8.a collapse to the single hoisted chain walk).
-# Previous, pre-collapse: OTS_STEPS=3231, XMSS_EPMAX_STEPS=4427.
-OTS_STEPS=2634
+# Record history (git is the leaderboard; this is the short form):
+#   M7 baseline                     OTS 3231, XMSS epmax 4427, static 203
+#   M8.a collapse to one walk       OTS 2634, XMSS epmax 3830, static 183  987c48e
+#   M8.b hash output in place       OTS 2238, XMSS epmax 3434, static 179
+OTS_STEPS=2238
 OTS_HASHES=101
 OTS_STEPS_DISTINCT=1
 OTS_HASHES_DISTINCT=1
-XMSS_EPMAX_STEPS=3830
+XMSS_EPMAX_STEPS=3434
 XMSS_EPMAX_HASHES=133
 AUTH_EPMAX_STEPS=1186
-STATIC_INSTRUCTIONS=183
+STATIC_INSTRUCTIONS=179
 ACCEPTING_FIXTURES=8
 CORPUS_FIXTURES=104

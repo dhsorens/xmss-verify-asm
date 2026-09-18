@@ -108,18 +108,26 @@ def chainLoad : Program :=
 /-- One chain step. Constants live outside the loop: `x7 = BUFA` (the hash
     buffer), `x5`/`x10`/`x11`/`x12` are the syscall arguments, and the tweak's
     epoch half is already in place at `BUFA + 8`. The tweak position
-    `8 i + pos` is carried in `x15`, so a step only has to shift it into the
-    tweak word, store it, call the oracle, and copy the digest into the
-    payload slot. -/
+    `8 i + pos` is carried in `x15`, so a step shifts it into the tweak word,
+    stores it, and calls the oracle.
+
+    There is no copy back into the payload slot, because the oracle writes
+    there directly: `x12 = CUR = BUFA + 32` is the payload slot itself. The
+    output block `[CUR, CUR + 32)` overlaps the input range `[BUFA, BUFA + 48)`
+    in exactly those 16 bytes. `hashEffect` reads the input from the
+    pre-state and writes the output to the post-state, so the overlap is
+    harmless in the model -- and it is harmless for any hash, since the output
+    depends on the whole input and cannot be emitted before the input is
+    absorbed. It does assume the host's hash syscall tolerates an output
+    buffer overlapping its input buffer; see `docs/CONTRACT.md`. The 16 bytes
+    above the payload (`CUR2`) are scratch the walk does not read. -/
 def chainStep : Program :=
-  [.SLLI .x6 .x15 32, .ADDI .x6 .x6 0x100, .SD .x7 .x6 0, .ECALL,
-   .LD .x28 .x12 0, .LD .x29 .x12 8, .SD .x7 .x28 32, .SD .x7 .x29 40,
-   .ADDI .x15 .x15 1]
+  [.SLLI .x6 .x15 32, .ADDI .x6 .x6 0x100, .SD .x7 .x6 0, .ECALL, .ADDI .x15 .x15 1]
 
 /-- The chain walk: hoist the constants, set the position `8 i + x` and the
     bound `8 i + 7`, then run a header-guarded loop of `chainStep`. -/
 def chainWalk : Program :=
-  [.LI .x7 BUFA, .LI .x5 HASH_ID, .LI .x10 BUFA, .LI .x11 48, .LI .x12 OUT,
+  [.LI .x7 BUFA, .LI .x5 HASH_ID, .LI .x10 BUFA, .LI .x11 48, .LI .x12 CUR,
    .SLLI .x6 .x8 32, .SD .x7 .x6 8, .ADD .x15 .x16 .x14, .ADDI .x17 .x16 7,
    .BGE .x15 .x17 (bOff (4 * (chainStep.length + 2)))] ++
   chainStep ++ [.JAL .x0 (jOff (-(4 * (chainStep.length + 1))))]
@@ -206,14 +214,14 @@ instance CodeAt.decidable (C : CodeMem) (base : Word) :
 /-- The one number a chain-walk change moves (with `chainWalk`,
     `chainWalk_correct` and `bOff_chainsLoop`). Every later region index is
     stated relative to it, so an index is never a frozen constant. -/
-theorem chainWalk_length : chainWalk.length = 20 := rfl
+theorem chainWalk_length : chainWalk.length = 16 := rfl
 
 /-! ## The loop branch offsets, evaluated (stated after `bOff`/`jOff` unfold) -/
 
 theorem bOff_decodeLoop : BitVec.ofInt 13 (-(4 * decodeBody.length)) = BitVec.ofInt 13 (-36) := rfl
-theorem bOff_chainWalk : BitVec.ofInt 13 (4 * (chainStep.length + 2)) = BitVec.ofInt 13 44 := rfl
-theorem jOff_chainWalk : BitVec.ofInt 21 (-(4 * (chainStep.length + 1))) = BitVec.ofInt 21 (-40) := rfl
-theorem bOff_chainsLoop : BitVec.ofInt 13 (-(4 * chainsBody.length)) = BitVec.ofInt 13 (-156) := rfl
+theorem bOff_chainWalk : BitVec.ofInt 13 (4 * (chainStep.length + 2)) = BitVec.ofInt 13 28 := rfl
+theorem jOff_chainWalk : BitVec.ofInt 21 (-(4 * (chainStep.length + 1))) = BitVec.ofInt 21 (-24) := rfl
+theorem bOff_chainsLoop : BitVec.ofInt 13 (-(4 * chainsBody.length)) = BitVec.ofInt 13 (-140) := rfl
 theorem bOff_authLoop : BitVec.ofInt 13 (-(4 * authBody.length)) = BitVec.ofInt 13 (-152) := rfl
 
 def idxInitPayload : Nat := initP.length

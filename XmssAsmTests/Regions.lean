@@ -87,10 +87,26 @@ def allRegs : List Reg :=
 def layoutCells : List Word :=
   (List.range ((SCRATCH_HI.toNat - ROOT.toNat) / 8)).map fun k => ROOT + BitVec.ofNat 64 (8 * k)
 
-def inWChain (a : Word) : Bool :=
-  (BUFA.toNat ≤ a.toNat && a.toNat < BUFA.toNat + 16) ||
-  (CUR.toNat ≤ a.toNat && a.toNat < CUR.toNat + 16) ||
-  (OUT.toNat ≤ a.toNat && a.toNat < OUT.toNat + 32)
+/-! ### The executable frame checks
+
+Each is `decide` of the *same* `Prop` the region theorem's `Frame` uses, not a
+hand-written copy of it. A copy drifts the first time a candidate changes a
+write set, and it drifts silently: the theorem still holds, the mirror still
+evaluates, and the suite reports a frame violation that is not there (or, worse,
+misses one that is). -/
+
+instance WChain.decidable (a : Word) : Decidable (WChain a) := by
+  unfold WChain; infer_instance
+instance WChains.decidable (a : Word) : Decidable (WChains a) := by
+  unfold WChains; infer_instance
+instance WLeaf.decidable (a : Word) : Decidable (WLeaf a) := by
+  unfold WLeaf; infer_instance
+instance WDecode.decidable (a : Word) : Decidable (WDecode a) := by
+  unfold WDecode; infer_instance
+instance WAuth.decidable (a : Word) : Decidable (WAuth a) := by
+  unfold WAuth; infer_instance
+
+def inWChain (a : Word) : Bool := decide (WChain a)
 
 /-- The entry state of a chain walk: the contract's precondition on top of
     sentinel registers and memory. -/
@@ -168,13 +184,9 @@ def chainCycles : List (Nat × Stats) :=
 /-! ## The chains region and the leaf region in isolation -/
 
 
-def inWChains (a : Word) : Bool :=
-  inWChain a || (ENDPTS.toNat ≤ a.toNat && a.toNat < ENDPTS.toNat + 672)
+def inWChains (a : Word) : Bool := decide (WChains a)
 
-def inWLeaf (a : Word) : Bool :=
-  (BUFL.toNat ≤ a.toNat && a.toNat < BUFL.toNat + 16) ||
-  (CUR.toNat ≤ a.toNat && a.toNat < CUR.toNat + 16) ||
-  (OUT.toNat ≤ a.toNat && a.toNat < OUT.toNat + 32)
+def inWLeaf (a : Word) : Bool := decide (WLeaf a)
 
 structure ChainsCase where
   name : String
@@ -303,7 +315,7 @@ def decodeState (c : DecodeCase) : MachineState :=
     { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := verifierCode, pc := addr idxDecode }
   (s.setReg .x20 (dLo c.d)).setReg .x21 (dHi c.d)
 
-def inWDecode (a : Word) : Bool := DIGITS.toNat ≤ a.toNat && a.toNat < DIGITS.toNat + 336
+def inWDecode (a : Word) : Bool := decide (WDecode a)
 
 /-- Run decode until it either reaches `idxChains` or halts. -/
 def runDecode (s : MachineState) : MachineState × Stats × Bool × Bool := Id.run do
@@ -382,10 +394,7 @@ def authState (c : AuthCase) : MachineState :=
   let s := s.writeWords CUR [dLo c.leaf, dHi c.leaf]
   s.writeWords AUTH ((List.ofFn c.path).flatMap digestWords)
 
-def inWAuth (a : Word) : Bool :=
-  (BUFA.toNat ≤ a.toNat && a.toNat < BUFA.toNat + 16) ||
-  (CUR.toNat ≤ a.toNat && a.toNat < CUR.toNat + 32) ||
-  (OUT.toNat ≤ a.toNat && a.toNat < OUT.toNat + 32)
+def inWAuth (a : Word) : Bool := decide (WAuth a)
 
 def checkAuth (c : AuthCase) : Option String × Stats :=
   let s := authState c

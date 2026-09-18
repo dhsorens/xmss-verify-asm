@@ -3,13 +3,16 @@
 
   The chain-walk region. From `x14 = x`, `x16 = 8 i`, `x8 = ep`, `CUR = v`,
   `BUFA_P = P`, execution reaches the instruction after the region with
-  `CUR = recoverChain P ep i x v`, touching only the tweak, `CUR` and `OUT`.
+  `CUR = recoverChain P ep i x v`, writing only the tweak doublewords of `BUFA`
+  and the 32 bytes at `CUR` (`WChain`). It does not touch `OUT` at all.
 
-  The theorem assumes only that the walk's own instructions sit at
-  `idxChainWalk` (`CodeAt`), so it says nothing about the rest of the
-  program and callers depend on `ChainWalkPost` alone. M3 validated this
-  boundary with a second implementation behind the same contract; M8.a
-  collapsed that dual, and git history keeps the experiment. LEGACY file.
+  This is the region an optimizer is allowed to rewrite, so the insulation is
+  the point: the theorem assumes only that the walk's own instructions sit at
+  `idxChainWalk` (`CodeAt`), it says nothing about the rest of the program, and
+  callers depend on `ChainWalkPost` alone. The boundary was validated by
+  satisfying this same contract with a second instruction sequence and swapping
+  between them in both directions with no other change; `main` carries one
+  implementation and git history keeps the experiment. LEGACY file.
 -/
 
 import XmssAsm.Regions.Common
@@ -36,7 +39,7 @@ def ChainKeep (s0 s : MachineState) : Prop :=
   s.getReg .x8 = s0.getReg .x8 ∧ s.getReg .x13 = s0.getReg .x13 ∧ s.getReg .x16 = s0.getReg .x16 ∧
   s.getReg .x18 = s0.getReg .x18 ∧ s.getReg .x19 = s0.getReg .x19
 
-/-- The chain-walk contract, shared by both implementations: the region ends
+/-- The chain-walk contract, which any implementation must satisfy: the region ends
     at `pcEnd` with `CUR = recoverChain`, the caller's registers kept, `P` in
     place, and nothing outside `WChain` written. -/
 def ChainWalkPost (H : HashInput → HashOutput) (s0 : MachineState) (P : PublicParameter)
@@ -45,7 +48,7 @@ def ChainWalkPost (H : HashInput → HashOutput) (s0 : MachineState) (P : Public
   s.pc = pcEnd ∧ ChainKeep s0 s ∧ HasDigest s BUFA_P P ∧
   HasDigest s CUR (recoverD H P ep ci x v) ∧ Frame WChain s0 s
 
-/-- The precondition shared by both implementations. -/
+/-- The precondition every implementation may assume. -/
 def ChainWalkPre (s : MachineState) (P : PublicParameter) (ep : Epoch) (ci : ChainIndex)
     (x : Digit) (v : Digest) : Prop :=
   s.pc = addr idxChainWalk ∧ s.getReg .x8 = BitVec.ofNat 64 ep.val ∧

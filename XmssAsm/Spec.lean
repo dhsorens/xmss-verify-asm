@@ -3,17 +3,18 @@
 
   The specification this project proves an implementation against: leanVM's
   `XmssSecurity.Scheme`, imported verbatim from the upstream package (pinned in
-  `lakefile.toml`). The theorem to hit is stated in terms of
+  `lakefile.toml`). `xmss_verify_correct` is stated in terms of
   `XmssSecurity.Concrete.verify`.
 
-  This is a LEGACY file, deliberately: `XmssSecurity.Scheme` is not a Lean
-  `module`, and a `module` cannot import a legacy file. The eventual bridging
-  theorem, which names both `Concrete.verify` and a `Decomp.cpsTotal`, will
-  have to live in a legacy file too until the upstream spec adopts the module
-  system. See `PLAN.md`.
+  This file defines nothing. It is a rename tripwire: the `example`s name every
+  upstream constant the proof depends on, so an upstream rename or signature
+  change fails here, with a one-line error, instead of surfacing as a broken
+  region proof somewhere in `XmssAsm.Regions`.
 
-  Nothing is defined here yet. The `example`s pin the names the bridge will
-  use, so an upstream rename fails this build rather than a later proof.
+  LEGACY file, deliberately: `XmssSecurity.Scheme` is not a Lean `module`, and
+  a `module` cannot import a legacy file. Everything that names
+  `XmssSecurity.*` is legacy for the same reason, up to and including
+  `XmssAsm.Verify`.
 -/
 
 import XmssSecurity.Scheme
@@ -30,7 +31,8 @@ example := @tweakableHashInput
 
 /-- The verifier is stated over any monad with a hash oracle. An implementation
     fixes the oracle to a concrete hash; leanVM's Rust fixes it to BLAKE2s-256.
-    This is the shape the bridge will instantiate. -/
+    `xmss_verify_correct` instantiates this shape at an arbitrary
+    `H : HashInput → HashOutput`, so it holds for every choice at once. -/
 example : PublicKey → Epoch → Message → Signature →
     OracleComp HashSpec Bool :=
   Concrete.verify

@@ -1,11 +1,22 @@
 /-
   XmssAsmTests.Regions
 
-  Component-level executable checks (PLAN E3): the byte-level bridge
-  (tweaks, payloads, hash inputs) evaluated against the specification's
-  functions, and the chain-walk region run in isolation for every digit
-  `0..7`, for both implementations, against `recoverChain` under `H_test`,
-  with the frame checked on a memory sample and the cycle counts recorded.
+  Component-level executable checks: each region run in isolation by the
+  interpreter and compared with the specification's own functions under
+  `H_test`, so a wrong region is caught in seconds rather than by a failing
+  proof.
+
+  Covered here: the byte-level bridge (tweaks, payloads, hash inputs); the
+  chain walk for every digit `0..7` against `recoverChain`; the 42-chain loop
+  and the leaf; decoding, including each padding bit and the target-sum
+  boundary; and the authentication path at the interesting epochs. Every case
+  also checks the region's write set -- by `decide` of the same `Frame`
+  predicate the region theorem uses, over every doubleword of the data layout
+  -- and records the cycle count.
+
+  These are not a merge gate. They cannot substitute for `xmss_verify_correct`,
+  and a candidate whose region proof does not close is rejected however green
+  this suite is.
 -/
 
 import XmssAsmTests.Fixtures

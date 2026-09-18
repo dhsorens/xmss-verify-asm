@@ -15,7 +15,7 @@ in the style of evm-asm, maybe using the refinement calculus and/or myreen decom
 
 ## Status
 
-**M1-M8 complete: the verifier is proved, and optimization is gated.**
+**M1-M9 complete: the verifier is proved, and optimization is gated and automated.**
 
 ```
 theorem xmss_verify_correct (H : HashInput → HashOutput) : VerifierCorrect H
@@ -45,8 +45,9 @@ cases (`scripts/test-differential.sh`), all passing.
 An accepting verification costs 3239 virtual cycles at epoch 0 and 3335 at the
 worst-case epoch, of which 2139 are the one-time signature (init, decode, 42
 WOTS chains, leaf); 133 abstract hash calls either way. `scripts/accept.sh`
-judges a change against `bench/baseline.txt`. `PLAN.md` is the work queue; M9
-(the autoresearch harness) is what remains.
+judges a change against `bench/baseline.txt`, and `scripts/autoresearch.sh`
+wraps it with the mutation boundary and a cheap pre-filter for candidates from
+an untrusted optimizer. `PLAN.md` is the work queue.
 
 ## The stack
 
@@ -139,7 +140,7 @@ it rejects a wrong chain walk in seconds), `lake exe bench` the metric dump the
 gate consumes, and `lake exe cycles` the region-by-region report. See "The
 optimization contract" in `docs/CONTRACT.md` for what is frozen, what is off
 limits to a candidate, and the difference between a gate pass and a new
-record.
+record. The current record is `(2139, 3335)`, landed through that harness.
 
 The first build also compiles `VCVio` and `XmssSecurity.Scheme` from source
 (no release oleans); `riscv-zkvm` builds from source too, but its import

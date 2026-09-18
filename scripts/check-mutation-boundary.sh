@@ -118,6 +118,12 @@ if [ -n "$DENIED" ]; then
   printf 'the machine and oracle semantics, the benchmark definitions, the fixture\n' >&2
   printf 'corpus, the scoreboard, the gate, or the toolchain pins. A candidate may\n' >&2
   printf 'not edit them; only a human, in a separate commit, may.\n' >&2
+  case " $DENIED " in
+    *" bench/baseline.txt "*)
+      printf '\nHint: bench/baseline.txt is also what `accept.sh --record` writes. If that\n' >&2
+      printf 'is where this came from, commit the record and re-run; the gate is flagging\n' >&2
+      printf 'its own uncommitted output, which is correct but not what you meant.\n' >&2 ;;
+  esac
   exit 1
 fi
 

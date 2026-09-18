@@ -92,11 +92,40 @@ def filterOts (f : Fixture) : Option (Nat × Nat) :=
   let (_, st, reached) := filterUntil H_test filterFuel s (addr idxAuth) {}
   if reached then some (st.steps, st.hashes) else none
 
+/-! ## The region pin
+
+The regions PLAN M9 freezes. The path-based mutation boundary is coarser than
+the declared search space: `XmssAsm/Program/Verifier.lean` is an allowed path,
+and it holds `chainStep` and `chainWalk`, which a candidate may change, next to
+every other region's instruction list, which it may not. The boundary check
+hashes this listing against `bench/regions.sha256` to close that gap at the
+granularity M9 declares.
+
+It lives here rather than in `bench` because this module imports no region
+proof: the check has to work on a candidate whose proof is still broken, which
+is exactly when a region was touched by accident. `chainStep` and `chainWalk`
+are deliberately absent, as are the indices, lengths and branch offsets, which
+are functions of the walk's length and must move with it. -/
+def frozenRegions : List (String × Program) :=
+  [("init", init), ("decode", decode), ("chainsPre", chainsPre), ("chainLoad", chainLoad),
+   ("chainStore", chainStore), ("leaf", leaf), ("authPre", authPre), ("authSelect", authSelect),
+   ("authHash", authHash), ("final", final)]
+
+def printRegions : IO Unit := do
+  IO.println "# the regions PLAN M9 freezes; chainStep and chainWalk are the search space"
+  for (name, prog) in frozenRegions do
+    IO.println s!"## {name}: {prog.length} instructions"
+    let mut i := 0
+    for ins in prog do
+      IO.println s!"{name}[{i}] {repr ins}"
+      i := i + 1
+
 end XmssAsm.Tests
 
 open XmssAsm XmssAsm.Tests
 
-def main : IO UInt32 := do
+def main (args : List String) : IO UInt32 := do
+  if args.contains "--regions" then printRegions; return 0
   IO.println "== xmss-asm inner filter (no proof is checked here) =="
   let mut failures := 0
   IO.println "-- the chain walk in isolation, digits 0..7"

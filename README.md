@@ -47,7 +47,8 @@ worst-case epoch, of which 2139 are the one-time signature (init, decode, 42
 WOTS chains, leaf); 133 abstract hash calls either way. `scripts/accept.sh`
 judges a change against `bench/baseline.txt`, and `scripts/autoresearch.sh`
 wraps it with the mutation boundary and a cheap pre-filter for candidates from
-an untrusted optimizer. `PLAN.md` is the work queue.
+an untrusted optimizer; `AUTORESEARCH.md` is the prompt for pointing an agent
+at that loop. `PLAN.md` is the work queue.
 
 ## The stack
 
@@ -105,7 +106,8 @@ XmssAsm/Spec.lean         imports XmssSecurity.Scheme and pins the names the bri
 XmssAsmTests/             test hash, fixtures, differential harness (not trusted)
 XmssAsmTools/             the axiom gate and the statement pin (not imported by any theorem)
 scripts/                  check-axioms.sh, check-forbidden-tactics.sh, test-differential.sh, accept.sh
-bench/                    the committed baseline and statement pin (the scoreboard)
+bench/                    the committed baseline and the pins (the scoreboard)
+AUTORESEARCH.md           the prompt for running the optimization loop with an agent
 docs/CONTRACT.md          the contract, layout, cost model, optimization contract, adversarial review
 PLAN.md                   the work queue and open decisions
 AGENTS.md                 standing rules

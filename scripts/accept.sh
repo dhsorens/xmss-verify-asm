@@ -152,6 +152,8 @@ if [ "$ACTUAL" != "$EXPECTED" ]; then
 fi
 ok "$(grep -c ' : ' "$WORK/pin.txt") pinned forms hash to $ACTUAL"
 
+
+
 # ---------------------------------------------------------------------------
 # 2. The rest of the proof check (tests and tooling), same budget.
 # ---------------------------------------------------------------------------

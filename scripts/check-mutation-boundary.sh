@@ -37,8 +37,44 @@ git rev-parse --verify "$BASE" >/dev/null 2>&1 \
 CHANGED="$( { git diff --name-only "$BASE"; git ls-files --others --exclude-standard; } \
   | sort -u )"
 
+REGIONFILE="bench/regions.sha256"
+[ -f "$REGIONFILE" ] || { echo "check-mutation-boundary: missing $REGIONFILE" >&2; exit 2; }
+
+# The region pin. Always, even with an empty diff: an empty diff against the
+# base says nothing about whether the pin itself is current.
+check_regions() {
+  local work; work="$(mktemp -d)"
+  if ! lake build filter > "$work/build.log" 2>&1; then
+    grep -E '^(error|warning):' "$work/build.log" | head -20 >&2
+    printf '\ncheck-mutation-boundary: REJECT -- the candidate program does not elaborate,\n' >&2
+    printf 'so the frozen regions cannot be listed.\n' >&2
+    rm -rf "$work"; exit 1
+  fi
+  lake exe filter --regions > "$work/regions.txt" 2>/dev/null
+  local want got
+  want="$(grep -vE '^#' "$REGIONFILE" | tr -d '[:space:]')"
+  got="$(shasum -a 256 < "$work/regions.txt" | cut -d' ' -f1)"
+  if [ "$got" != "$want" ]; then
+    printf 'expected %s\nactual   %s\n' "$want" "$got" >&2
+    cp "$work/regions.txt" ./boundary-regions-actual.txt 2>/dev/null \
+      && printf 'wrote the frozen-region listing to ./boundary-regions-actual.txt\n' >&2
+    printf '\ncheck-mutation-boundary: REJECT -- a region outside the search space changed.\n' >&2
+    printf 'Frozen: init, decode, chainsPre, chainLoad, chainStore, leaf, authPre,\n' >&2
+    printf 'authSelect, authHash, final. The search space is chainStep and chainWalk\n' >&2
+    printf '(plus the indices, lengths and offsets that are functions of the walk\n' >&2
+    printf "length). Opening another region is a human decision, in its own commit.\n" >&2
+    rm -rf "$work"; exit 1
+  fi
+  printf '  regions   %s frozen regions unchanged (%s)\n' \
+    "$(grep -c '^## ' "$work/regions.txt")" "$got"
+  rm -rf "$work"
+}
+
 if [ -z "$CHANGED" ]; then
-  echo "check-mutation-boundary: OK -- no changes against $BASE."
+  printf '== mutation boundary against %s ==\n' "$BASE"
+  printf '  (no changed paths)\n'
+  check_regions
+  echo "check-mutation-boundary: OK -- no changes against $BASE, regions unchanged."
   exit 0
 fi
 
@@ -86,6 +122,7 @@ is_denied() {
     scripts/*)                       return 0 ;;
     lakefile.toml|lake-manifest.json|lean-toolchain) return 0 ;;
     AGENTS.md|CLAUDE.md)             return 0 ;;
+    AUTORESEARCH.md)                 return 0 ;;   # the loop's own instructions
     *) return 1 ;;
   esac
 }
@@ -126,6 +163,9 @@ if [ -n "$DENIED" ]; then
   esac
   exit 1
 fi
+
+# Only once the paths are clean: a denied path is the more important message.
+check_regions
 
 printf '\ncheck-mutation-boundary: OK -- nothing frozen was touched.\n'
 exit 0

@@ -35,11 +35,11 @@ The last command should print `accept: PASS` and `m == baseline`. If it does
 not, fix that first: the loop cannot tell a candidate's failure from a broken
 starting tree.
 
-Two costs worth knowing before you point an agent at this. A full candidate
-judgement is about 50 seconds on a warm tree, of which the proof check is a
-few seconds, so the loop is cheap to iterate. But the proof repair is the part
-an agent will spend its time on, and it is real Lean work on symbolic
-execution proofs; budget accordingly.
+Two costs worth knowing before you point an agent at this. On a warm tree the
+cheap filter is about 15 seconds and a full candidate judgement about 70, of
+which the proof check itself is a handful, so the loop is cheap to iterate. But
+the proof repair is where an agent will spend its time, and it is real Lean
+work on symbolic-execution proofs; budget accordingly.
 
 ## The prompt
 
@@ -66,7 +66,7 @@ is.
 > ```
 >
 > It runs three tiers in order: the mutation boundary, the cheap
-> interpreter-only filter (`lake exe filter`, about ten seconds, builds none of
+> interpreter-only filter (`lake exe filter`, about 15 seconds, builds none of
 > the region proofs), and the accept gate (`scripts/accept.sh`, the statement pin, the
 > proof check under a wall-clock budget, both trust gates, the differential
 > suite, the hash pin and the score). Exit 0 means gate pass. Read its output;

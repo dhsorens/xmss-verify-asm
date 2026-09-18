@@ -41,6 +41,7 @@ def Stats.ordinary (st : Stats) : Nat := st.steps - st.hashes
 /-- Total synthetic cost under a given hash cost. -/
 def Stats.cost (st : Stats) (hashCost : Nat) : Nat := st.ordinary + st.hashes * hashCost
 
+-- adjustable hash cost parameter
 def defaultHashCost : Nat := 1
 
 /-- Why a run stopped. -/

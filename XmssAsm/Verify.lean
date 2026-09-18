@@ -22,9 +22,9 @@ open RiscvZkvm.Rv64 XmssSecurity
 /-! ## Every region writes inside the scratch area -/
 
 theorem WChain_scratch (a : Word) (h : WChain a) : InScratch a := by
-  simp only [WChain, InRange, BUFA, CUR, OUT, InScratch, SCRATCH_LO, SCRATCH_HI,
+  simp only [WChain, InRange, BUFA, CUR, InScratch, SCRATCH_LO, SCRATCH_HI,
     BitVec.reduceToNat] at h ⊢
-  rcases h with h | h | h <;> omega
+  rcases h with h | h <;> omega
 
 theorem WInit_scratch (a : Word) (h : WInit a) : InScratch a := by
   simp only [WInit, InRange, BUFA, BUFL_P, OUT, InScratch, SCRATCH_LO, SCRATCH_HI,
@@ -85,7 +85,7 @@ theorem not_WDecode_buflP : ¬ WDecode BUFL_P ∧ ¬ WDecode (BUFL_P + 8) := by
   simp only [WDecode, InRange, DIGITS, BUFL_P]; decide
 
 theorem not_WChains_buflP : ¬ WChains BUFL_P ∧ ¬ WChains (BUFL_P + 8) := by
-  simp only [WChains, WChain, InRange, BUFA, CUR, OUT, ENDPTS, BUFL_P, not_or]; decide
+  simp only [WChains, WChain, InRange, BUFA, CUR, ENDPTS, BUFL_P, not_or]; decide
 
 theorem not_WLeaf_bufaP : ¬ WLeaf BUFA_P ∧ ¬ WLeaf (BUFA_P + 8) := by
   simp only [WLeaf, InRange, BUFL, CUR, OUT, BUFA_P, not_or]; decide

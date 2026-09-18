@@ -1,0 +1,17 @@
+# SHA-256 of the output of `lake env ./.lake/build/bin/statementpin`: the
+# elaborated form of the frozen vocabulary (PLAN M8.a accept gate, step 1).
+#
+# NOT CANDIDATE MATERIAL. A weakened statement -- an added hypothesis on
+# `VerifierCorrect`, a dropped conjunct in `Represents`, a widened frame, a
+# moved input address, a redefined hash `ECALL` -- builds cleanly, passes the
+# axiom sweep, passes every fixture, and scores better. This hash is the only
+# thing in the gate that catches it.
+#
+# `verifier`, `verifierCode` and every index derived from the region lengths
+# are deliberately NOT in the pinned set: those are what a candidate changes.
+# See `XmssAsmTools/StatementPin.lean` for the list and why each name is on it.
+#
+# Re-pinning is a human action in its own commit. The legitimate reason is a
+# toolchain bump moving the pretty-printer's output with no change in meaning;
+# diff the two dumps before believing that.
+cf3db3469463f5ac8bfd574f8e05a65e3901ba6f35c83df4635c518008d8aed3

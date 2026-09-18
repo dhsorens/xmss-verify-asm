@@ -21,6 +21,7 @@ import XmssAsm.Smoke
 import XmssAsm.Spec
 import XmssAsm.Machine.Hash
 import XmssAsm.Machine.Layout
+import XmssAsm.Machine.Cost
 import XmssAsm.Machine.Sym
 import XmssAsm.Machine.Eval
 import XmssAsm.Program.Verifier
@@ -34,6 +35,7 @@ import XmssAsm.Regions.Leaf
 import XmssAsm.Spec.Decode
 import XmssAsm.Regions.Decode
 import XmssAsm.Regions.Auth
+import XmssAsm.Regions.AuthCost
 import XmssAsm.Regions.Final
 import XmssAsm.Represent
 import XmssAsm.Contract

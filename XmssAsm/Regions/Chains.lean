@@ -17,18 +17,18 @@ open RiscvZkvm.Rv64 XmssSecurity
 def WChains (a : Word) : Prop := WChain a ∨ InRange ENDPTS 672 a
 
 theorem not_WChains_bufaP : ¬ WChains BUFA_P ∧ ¬ WChains (BUFA_P + 8) := by
-  simp only [WChains, WChain, InRange, not_or, BUFA, CUR, OUT, ENDPTS, BUFA_P]; decide
+  simp only [WChains, WChain, InRange, not_or, BUFA, CUR, ENDPTS, BUFA_P]; decide
 
 theorem not_WChains_chains (i : Nat) (hi : i < 42) :
     ¬ WChains (CHAINS + BitVec.ofNat 64 (16 * i)) ∧ ¬ WChains (CHAINS + BitVec.ofNat 64 (16 * i) + 8) := by
-  simp only [WChains, WChain, InRange, not_or, BUFA, CUR, OUT, ENDPTS, CHAINS]; bv_omega
+  simp only [WChains, WChain, InRange, not_or, BUFA, CUR, ENDPTS, CHAINS]; bv_omega
 
 theorem not_WChains_digits (i : Nat) (hi : i < 42) : ¬ WChains (DIGITS + BitVec.ofNat 64 (8 * i)) := by
-  simp only [WChains, WChain, InRange, not_or, BUFA, CUR, OUT, ENDPTS, DIGITS]; bv_omega
+  simp only [WChains, WChain, InRange, not_or, BUFA, CUR, ENDPTS, DIGITS]; bv_omega
 
 theorem not_WChain_endpts (j : Nat) (hj : j < 42) :
     ¬ WChain (ENDPTS + BitVec.ofNat 64 (16 * j)) ∧ ¬ WChain (ENDPTS + BitVec.ofNat 64 (16 * j) + 8) := by
-  simp only [WChain, InRange, not_or, BUFA, CUR, OUT, ENDPTS]; bv_omega
+  simp only [WChain, InRange, not_or, BUFA, CUR, ENDPTS]; bv_omega
 
 /-- The loop invariant at the head of the chains loop after `i` chains (at
     `idxLeaf` once all 42 are done). -/

@@ -22,6 +22,7 @@
 module
 
 public import XmssAsm.Machine.Hash
+public import XmssAsm.Machine.Cost
 public import XmssAsm.Machine.Layout
 public import XmssAsm.Program.Verifier
 
@@ -80,9 +81,8 @@ macro "sym_norm" loc:(Lean.Parser.Tactic.location)? : tactic =>
       XmssAsm.idxChainWalk_eq, XmssAsm.idxChainStore_eq, XmssAsm.idxLeaf_eq, XmssAsm.idxAuth_eq,
       XmssAsm.idxAuthLoop_eq, XmssAsm.idxAuthHash_eq, XmssAsm.idxFinal_eq, XmssAsm.idxAccept_eq,
       XmssAsm.idxReject_eq, XmssAsm.idxEnd_eq, XmssAsm.chainWalk_length,
-      XmssAsm.chainWalkA_length, XmssAsm.chainWalkB_length,
-      XmssAsm.bOff_decodeLoop, XmssAsm.bOff_chainWalkA, XmssAsm.jOff_chainWalkA, XmssAsm.bOff_chainWalkB,
-      XmssAsm.jOff_chainWalkB, XmssAsm.bOff_chainsLoop, XmssAsm.bOff_authLoop,
+      XmssAsm.bOff_decodeLoop, XmssAsm.bOff_chainWalk, XmssAsm.bOff_chainBack,
+      XmssAsm.bOff_chainsLoop, XmssAsm.bOff_authLoop,
       XmssAsm.jOff, XmssAsm.bOff, XmssAsm.imm, Int.reduceNeg,
       BitVec.add_zero,
       decide_eq_true_eq, decide_true, decide_false, eq_self_iff_true, reduceCtorEq,
@@ -165,6 +165,24 @@ macro "sym_hash_in" inp:term : tactic =>
 /-- Resolve a branch after `sym_plain` produced `Runs (if c then _ else _) Q`. -/
 macro "sym_branch" h:term : tactic =>
   `(tactic| (first | rw [if_pos $h] | rw [if_neg $h] | simp only [$h:term, ite_true, ite_false]))
+
+/-! ### Step-counted variants (`RunsN`), for cost proofs
+
+Identical to the `_f` steps above but through `RunsN.stepD`, so the goal's
+literal step count counts down as the proof advances. -/
+
+macro "symc_plain" hf:ident : tactic =>
+  `(tactic| (refine XmssAsm.RunsN.stepD (by decide) (XmssAsm.stepH_plain $hf (by decide) (by decide) (by decide)) ?_; sym_norm))
+macro "symc_ld" hf:ident : tactic =>
+  `(tactic| (refine XmssAsm.RunsN.stepD (by decide) (XmssAsm.stepH_ld $hf (by sym_valid)) ?_; sym_norm))
+macro "symc_sd" hf:ident : tactic =>
+  `(tactic| (refine XmssAsm.RunsN.stepD (by decide) (XmssAsm.stepH_sd $hf (by sym_valid)) ?_; sym_norm))
+macro "symc_ld_with" hf:ident h:term : tactic =>
+  `(tactic| (refine XmssAsm.RunsN.stepD (by decide) (XmssAsm.stepH_ld $hf $h) ?_; sym_norm))
+macro "symc_sd_with" hf:ident h:term : tactic =>
+  `(tactic| (refine XmssAsm.RunsN.stepD (by decide) (XmssAsm.stepH_sd $hf $h) ?_; sym_norm))
+macro "symc_hash" hf:ident : tactic =>
+  `(tactic| (refine XmssAsm.RunsN.stepD (by decide) (XmssAsm.stepH_hash $hf (by sym_norm <;> rfl) (by simp only [XmssAsm.hashArgsValid, XmssAsm.outBlockValid]; sym_norm <;> decide)) ?_; sym_norm))
 
 /-! ## Frame goals -/
 

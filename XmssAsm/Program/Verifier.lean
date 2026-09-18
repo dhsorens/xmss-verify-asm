@@ -105,36 +105,37 @@ def chainLoad : Program :=
   [.LI .x6 CHAINS, .SLLI .x7 .x13 4, .ADD .x6 .x6 .x7, .LD .x28 .x6 0, .LD .x29 .x6 8,
    .LI .x6 CUR, .SD .x6 .x28 0, .SD .x6 .x29 8, .LD .x14 .x19 0]
 
-/-- Implementation A of the chain walk: header-guarded loop, every constant
-    reloaded per step. Precondition: `x8 = ep`, `x14 = x`, `x16 = 8 i`, `CUR`
-    holds the value. Postcondition: `CUR` holds the walked value. -/
-def chainStepA : Program :=
-  [.ADD .x6 .x16 .x15, .SLLI .x6 .x6 32, .ADDI .x6 .x6 0x100,
-   .LI .x7 BUFA, .SD .x7 .x6 0, .SLLI .x6 .x8 32, .SD .x7 .x6 8,
-   .LI .x5 HASH_ID, .LI .x10 BUFA, .LI .x11 48, .LI .x12 OUT, .ECALL,
-   .LI .x6 OUT, .LD .x28 .x6 0, .LD .x29 .x6 8, .SD .x7 .x28 32, .SD .x7 .x29 40,
-   .ADDI .x15 .x15 1]
+/-- One chain step. Constants live outside the loop: `x7 = BUFA` (the hash
+    buffer), `x5`/`x10`/`x11`/`x12` are the syscall arguments, and the tweak's
+    epoch half is already in place at `BUFA + 8`. The tweak position
+    `8 i + pos` is carried in `x15`, so a step shifts it into the tweak word,
+    stores it, and calls the oracle.
 
-def chainWalkA : Program :=
-  [.MV .x15 .x14, .LI .x17 7,
-   .BGE .x15 .x17 (bOff (4 * (chainStepA.length + 2)))] ++
-  chainStepA ++ [.JAL .x0 (jOff (-(4 * (chainStepA.length + 1))))]
+    There is no copy back into the payload slot, because the oracle writes
+    there directly: `x12 = CUR = BUFA + 32` is the payload slot itself. The
+    output block `[CUR, CUR + 32)` overlaps the input range `[BUFA, BUFA + 48)`
+    in exactly those 16 bytes. `hashEffect` reads the input from the
+    pre-state and writes the output to the post-state, so the overlap is
+    harmless in the model -- and it is harmless for any hash, since the output
+    depends on the whole input and cannot be emitted before the input is
+    absorbed. It does assume the host's hash syscall tolerates an output
+    buffer overlapping its input buffer; see `docs/CONTRACT.md`. The 16 bytes
+    above the payload (`CUR2`) are scratch the walk does not read. -/
+def chainStep : Program :=
+  [.SLLI .x6 .x15 32, .ADDI .x6 .x6 0x100, .SD .x7 .x6 0, .ECALL, .ADDI .x15 .x15 1]
 
-/-- Implementation B: constants hoisted out of the loop, the tweak position
-    `8 i + pos` kept directly in `x15`, the bound `8 i + 7` in `x17`. -/
-def chainStepB : Program :=
-  [.SLLI .x6 .x15 32, .ADDI .x6 .x6 0x100, .SD .x7 .x6 0, .ECALL,
-   .LD .x28 .x12 0, .LD .x29 .x12 8, .SD .x7 .x28 32, .SD .x7 .x29 40,
-   .ADDI .x15 .x15 1]
+/-- The chain walk: hoist the constants, set the position `8 i + x` and the
+    bound `8 i + 7`, guard the loop once, then run `chainStep` with the branch
+    at the bottom.
 
-def chainWalkB : Program :=
-  [.LI .x7 BUFA, .LI .x5 HASH_ID, .LI .x10 BUFA, .LI .x11 48, .LI .x12 OUT,
+    The guard is needed because digit 7 walks no steps at all. Everything after
+    it is a rotated loop: one conditional branch per iteration rather than a
+    branch at the top and a jump at the bottom. -/
+def chainWalk : Program :=
+  [.LI .x7 BUFA, .LI .x5 HASH_ID, .LI .x10 BUFA, .LI .x11 48, .LI .x12 CUR,
    .SLLI .x6 .x8 32, .SD .x7 .x6 8, .ADD .x15 .x16 .x14, .ADDI .x17 .x16 7,
-   .BGE .x15 .x17 (bOff (4 * (chainStepB.length + 2)))] ++
-  chainStepB ++ [.JAL .x0 (jOff (-(4 * (chainStepB.length + 1))))]
-
-/-- The chain-walk implementation the verifier is built with. -/
-def chainWalk : Program := chainWalkA
+   .BGE .x15 .x17 (bOff (4 * (chainStep.length + 2)))] ++
+  chainStep ++ [.BLT .x15 .x17 (bOff (-(4 * chainStep.length)))]
 
 /-- Store `CUR` as endpoint `i`, advance the four loop registers. -/
 def chainStore : Program :=
@@ -197,24 +198,8 @@ def verifier : Program := init ++ decode ++ chains ++ leaf ++ auth ++ final
     `CODE_BASE`, nothing else. -/
 def verifierCode : CodeMem := loadProgram CODE_BASE verifier
 
-/-! ## The verifier with an alternative chain walk (tests and cycle reports) -/
-
-def chainsBodyWith (cw : Program) : Program := chainLoad ++ cw ++ chainStore
-def chainsWith (cw : Program) : Program :=
-  chainsPre ++ chainsBodyWith cw ++ [.BNE .x13 .x6 (bOff (-(4 * (chainsBodyWith cw).length)))]
-def verifierWith (cw : Program) : Program := init ++ decode ++ chainsWith cw ++ leaf ++ auth ++ final
-
-/-- The builder agrees with the artifact on the selected implementation. -/
-theorem verifierWith_chainWalk : verifierWith chainWalk = verifier := by decide +kernel
-
-/-- The verifier built with implementation B, for the differential suite. -/
-def verifierB : Program := verifierWith chainWalkB
-def verifierCodeB : CodeMem := loadProgram CODE_BASE verifierB
-
 /-- Address of instruction index `k`. -/
 def addr (k : Nat) : Word := CODE_BASE + BitVec.ofNat 64 (4 * k)
-
-/-! ## Region boundaries, as instruction indices -/
 
 /-! ## Code hypotheses for region proofs
 
@@ -231,20 +216,17 @@ instance CodeAt.decidable (C : CodeMem) (base : Word) :
   | [], _ => isTrue trivial
   | _ :: rest, k => @instDecidableAnd _ _ _ (CodeAt.decidable C base rest (k + 1))
 
-/-- The one number a chain-walk swap changes (with `chainWalk`, `chainWalk_correct`
-    and `bOff_chainsLoop`). Every later region index is stated relative to it. -/
-theorem chainWalk_length : chainWalk.length = 22 := rfl
-theorem chainWalkA_length : chainWalkA.length = 22 := rfl
-theorem chainWalkB_length : chainWalkB.length = 20 := rfl
+/-- The one number a chain-walk change moves (with `chainWalk`,
+    `chainWalk_correct` and `bOff_chainsLoop`). Every later region index is
+    stated relative to it, so an index is never a frozen constant. -/
+theorem chainWalk_length : chainWalk.length = 16 := rfl
 
 /-! ## The loop branch offsets, evaluated (stated after `bOff`/`jOff` unfold) -/
 
 theorem bOff_decodeLoop : BitVec.ofInt 13 (-(4 * decodeBody.length)) = BitVec.ofInt 13 (-36) := rfl
-theorem bOff_chainWalkA : BitVec.ofInt 13 (4 * (chainStepA.length + 2)) = BitVec.ofInt 13 80 := rfl
-theorem jOff_chainWalkA : BitVec.ofInt 21 (-(4 * (chainStepA.length + 1))) = BitVec.ofInt 21 (-76) := rfl
-theorem bOff_chainWalkB : BitVec.ofInt 13 (4 * (chainStepB.length + 2)) = BitVec.ofInt 13 44 := rfl
-theorem jOff_chainWalkB : BitVec.ofInt 21 (-(4 * (chainStepB.length + 1))) = BitVec.ofInt 21 (-40) := rfl
-theorem bOff_chainsLoop : BitVec.ofInt 13 (-(4 * chainsBody.length)) = BitVec.ofInt 13 (-164) := rfl
+theorem bOff_chainWalk : BitVec.ofInt 13 (4 * (chainStep.length + 2)) = BitVec.ofInt 13 28 := rfl
+theorem bOff_chainBack : BitVec.ofInt 13 (-(4 * chainStep.length)) = BitVec.ofInt 13 (-20) := rfl
+theorem bOff_chainsLoop : BitVec.ofInt 13 (-(4 * chainsBody.length)) = BitVec.ofInt 13 (-140) := rfl
 theorem bOff_authLoop : BitVec.ofInt 13 (-(4 * authBody.length)) = BitVec.ofInt 13 (-152) := rfl
 
 def idxInitPayload : Nat := initP.length

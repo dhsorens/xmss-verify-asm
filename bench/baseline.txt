@@ -1,0 +1,61 @@
+# xmss-asm benchmark baseline -- the committed scoreboard (PLAN M8.a).
+#
+# THIS FILE IS NOT CANDIDATE MATERIAL. A candidate program may not edit it,
+# and neither may `scripts/accept.sh`, the other gate scripts, or the fixture
+# corpus. Editing a number here is cheaper than weakening a proof, which is
+# exactly the mismatch PLAN R8 warns about. Only `scripts/accept.sh --record`,
+# on a measured new record, or a human in a separate commit, writes to it.
+#
+# Format: `KEY=VALUE`, one per line, the same format `lake exe bench` prints.
+#
+# The score is the lexicographic pair
+#
+#     m = (OTS_STEPS, XMSS_EPMAX_STEPS)
+#
+#   gate pass:  proofs + tests + exact hash pin  and  m <= baseline
+#   new record: gate pass  and  m < baseline
+#
+# OTS is init + decode + 42 WOTS chains + leaf, stopping at the *semantic* cut:
+# after the leaf hash, before the first authentication instruction. That
+# boundary is immutable; the index that names it (`idxAuth`) is not, since it
+# is `idxLeaf + leaf.length` and moves with the region lengths.
+#
+# XMSS is the full run on `valid-epmax`, the worst-case accepting epoch.
+# `XmssAsm.authSteps_lt_of_ne` proves that is the unique maximum: the
+# authentication path costs `1090 + 3 * popcount32 ep` steps.
+#
+# Hash counts are an exact pin, not a score term. A candidate that queries the
+# oracle fewer times is computing something else; it fails the gate rather
+# than setting a record.
+#
+# `OTS_STEPS_DISTINCT` must be 1: OTS cost has to be the same on every
+# accepting fixture, or "OTS steps on an accepting path" is not well defined.
+#
+# `TARGET_OTS_STEPS` is the stretch target: what "really good" would look
+# like, recorded so it is not lost. It is NOT a gate condition and never
+# affects the verdict -- the gate is `m <= baseline`. The gate prints distance
+# to it. See PLAN.md ("Stretch target") for why 512 is hard: the 101 hash
+# ECALLs and roughly one tweak store per chain step are about 200 of it
+# already, so reaching it needs `decode` and the chain loop overhead to come
+# down too, which is beyond M9's `chainWalk`-only search space.
+#
+# Recorded but NOT scored: STATIC_INSTRUCTIONS (a tie-break at most),
+# AUTH_EPMAX_STEPS (a check on the cost theorem), proof-check wall clock (an
+# engineering constraint on autoresearch throughput, PLAN R10).
+#
+# Record history (git is the leaderboard; this is the short form):
+#   M7 baseline                     OTS 3231, XMSS epmax 4427, static 203
+#   M8.a collapse to one walk       OTS 2634, XMSS epmax 3830, static 183  987c48e
+#   M8.b hash output in place       OTS 2238, XMSS epmax 3434, static 179  2cc4ef0
+#   M9  rotated chain loop          OTS 2139, XMSS epmax 3335, static 179
+TARGET_OTS_STEPS=512
+OTS_STEPS=2139
+OTS_HASHES=101
+OTS_STEPS_DISTINCT=1
+OTS_HASHES_DISTINCT=1
+XMSS_EPMAX_STEPS=3335
+XMSS_EPMAX_HASHES=133
+AUTH_EPMAX_STEPS=1186
+STATIC_INSTRUCTIONS=179
+ACCEPTING_FIXTURES=8
+CORPUS_FIXTURES=104

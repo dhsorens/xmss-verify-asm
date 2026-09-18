@@ -1,10 +1,11 @@
 /-
   XmssAsmTests.Main -- `lake exe difftest`
 
-  Runs the component suites (byte bridge, chain region for both
-  implementations), the end-to-end differential corpus on the artifact and on
-  the implementation-B build, and prints the cycle reports. Exit code 1 on
-  any disagreement.
+  Runs the component suites (byte bridge, chain, chains, leaf, decode and
+  auth regions), the cost cross-checks of PLAN M8.a (the proved auth-path
+  cost against the interpreter, the hash pins, and the constancy of the OTS
+  step count), and the end-to-end differential corpus, printing the cycle
+  reports. Exit code 1 on any disagreement.
 -/
 
 import XmssAsmTests
@@ -14,7 +15,7 @@ open XmssAsm XmssAsm.Tests XmssSecurity
 def main (args : List String) : IO UInt32 := do
   let hashCost := (args.head? >>= String.toNat?).getD defaultHashCost
   IO.println s!"== xmss-asm differential test (hash cost = {hashCost}) =="
-  IO.println s!"static instruction count: {staticInstructionCount} (implementation B build: {verifierB.length})"
+  IO.println s!"static instruction count: {staticInstructionCount}"
   let mut failures := 0
   IO.println "-- component checks: byte-level bridge"
   for (name, ok) in componentChecks do
@@ -22,64 +23,93 @@ def main (args : List String) : IO UInt32 := do
     else
       failures := failures + 1
       IO.println s!"FAIL {name}"
-  IO.println "-- component checks: chain walk, digits 0..7, implementations A and B"
+  IO.println "-- component checks: chain walk, digits 0..7"
   let mut nChain := 0
-  for impl in [implA, implB] do
-    for c in chainCorpus do
-      nChain := nChain + 1
-      match checkChain impl c with
-      | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
-      | (none, _) => pure ()
+  for c in chainCorpus do
+    nChain := nChain + 1
+    match checkChain c with
+    | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
+    | (none, _) => pure ()
   IO.println s!"{nChain} chain cases run"
   IO.println "-- chain walk cycles per digit (steps / hashes), starting digest 0"
-  let cyA := chainCycles implA
-  let cyB := chainCycles implB
-  for ((x, a), (_, b)) in cyA.zip cyB do
-    IO.println s!"digit {x}: A steps={a.steps} hashes={a.hashes} cost={a.cost hashCost} | \
-      B steps={b.steps} hashes={b.hashes} cost={b.cost hashCost}"
-  IO.println "-- component checks: chains region (42 endpoints) and leaf region, builds A and B"
+  for (x, st) in chainCycles do
+    IO.println s!"digit {x}: steps={st.steps} hashes={st.hashes} cost={st.cost hashCost}"
+  IO.println "-- component checks: chains region (42 endpoints) and leaf region"
   let mut nRegion := 0
-  for b in [buildA, buildB] do
-    for c in chainsCorpus do
-      nRegion := nRegion + 1
-      match checkChains b c with
-      | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
-      | (none, st) =>
-        if c.name.startsWith "chains.all" || c.name == "chains.rnd0" then
-          IO.println s!"ok   {c.name}[{b.name}]: steps={st.steps} hashes={st.hashes} cost={st.cost hashCost}"
-    for c in leafCorpus do
-      nRegion := nRegion + 1
-      match checkLeaf b c with
-      | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
-      | (none, st) =>
-        if c.name == "leaf.rnd0" then
-          IO.println s!"ok   {c.name}[{b.name}]: steps={st.steps} hashes={st.hashes} cost={st.cost hashCost}"
+  for c in chainsCorpus do
+    nRegion := nRegion + 1
+    match checkChains c with
+    | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
+    | (none, st) =>
+      if c.name.startsWith "chains.all" || c.name == "chains.rnd0" then
+        IO.println s!"ok   {c.name}: steps={st.steps} hashes={st.hashes} cost={st.cost hashCost}"
+  for c in leafCorpus do
+    nRegion := nRegion + 1
+    match checkLeaf c with
+    | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
+    | (none, st) =>
+      if c.name == "leaf.rnd0" then
+        IO.println s!"ok   {c.name}: steps={st.steps} hashes={st.hashes} cost={st.cost hashCost}"
   IO.println s!"{nRegion} chains/leaf region cases run"
-  IO.println "-- component checks: decode region against decodeDigest, builds A and B"
+  IO.println "-- component checks: decode region against decodeDigest"
   let mut nDecode := 0
   let mut nAccept := 0
-  for b in [buildA, buildB] do
-    for c in decodeCorpus do
-      nDecode := nDecode + 1
-      match checkDecode b c with
-      | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
-      | (none, st) =>
-        let acc := (TargetSum.decodeDigest c.d).isSome
-        if acc then nAccept := nAccept + 1
-        if b.name == "A" then
-          IO.println s!"ok   {c.name}: {if acc then "accept" else "reject"} steps={st.steps}"
+  for c in decodeCorpus do
+    nDecode := nDecode + 1
+    match checkDecode c with
+    | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
+    | (none, st) =>
+      let acc := (TargetSum.decodeDigest c.d).isSome
+      if acc then nAccept := nAccept + 1
+      IO.println s!"ok   {c.name}: {if acc then "accept" else "reject"} steps={st.steps}"
   IO.println s!"{nDecode} decode cases run ({nAccept} accepting)"
-  IO.println "-- component checks: auth region (32 levels, both orderings), builds A and B"
+  IO.println "-- component checks: auth region (32 levels, both orderings)"
   let mut nAuth := 0
-  for b in [buildA, buildB] do
-    for c in authCorpus do
-      nAuth := nAuth + 1
-      match checkAuth b c with
+  for c in authCorpus do
+    nAuth := nAuth + 1
+    match checkAuth c with
+    | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
+    | (none, st) => IO.println s!"ok   {c.name}: steps={st.steps} hashes={st.hashes}"
+  IO.println s!"{nAuth} auth cases run"
+  IO.println "-- cost checks: proved auth-path cost vs the interpreter (PLAN M8.a)"
+  let mut nCost := 0
+  for f in authCostCorpus do
+    nCost := nCost + 1
+    match checkAuthCost f with
+    | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
+    | (none, steps) =>
+      IO.println s!"ok   authcost {f.name}: {steps} steps = 1090 + 3 * popcount32 {f.ep.val}"
+  IO.println s!"{nCost} auth-cost cases run"
+  IO.println "-- cost checks: hash pins and OTS-step constancy (PLAN M8.a)"
+  for f in authCostCorpus do
+    match checkHashPin f with
+    | some msg => failures := failures + 1; IO.println s!"FAIL {msg}"
+    | none => pure ()
+  IO.println s!"ok   hash pin: {otsHashesPin} OTS / {xmssHashesPin} XMSS hashes \
+    on all {authCostCorpus.length} accepting fixtures"
+  match authCostCorpus.head? >>= otsSteps with
+  | none => failures := failures + 1; IO.println "FAIL ots-constancy: no accepting fixture ran"
+  | some ots =>
+    let mut const := true
+    for f in authCostCorpus do
+      if otsSteps f != some ots then
+        const := false
+        failures := failures + 1
+        IO.println s!"FAIL ots-constancy {f.name}: {otsSteps f} steps, expected {ots}"
+    if const then
+      IO.println s!"ok   OTS step count is {ots} on every accepting fixture"
+  IO.println "-- reject archive: recorded candidates must still fail (PLAN M8.b)"
+  match rejectFixture with
+  | none => failures := failures + 1; IO.println "FAIL reject archive: fixture valid-epmax is missing"
+  | some rf =>
+    for r in rejects do
+      match checkReject r rf with
       | (some msg, _) => failures := failures + 1; IO.println s!"FAIL {msg}"
       | (none, st) =>
-        if b.name == "A" then IO.println s!"ok   {c.name}: steps={st.steps} hashes={st.hashes}"
-  IO.println s!"{nAuth} auth cases run"
-  IO.println "-- end-to-end corpus, artifact (implementation A)"
+        IO.println s!"ok   reject {r.name}: still fails as {repr r.kind} \
+          ({st.steps} steps, {st.hashes} hashes)"
+  IO.println s!"{rejects.length} archived rejects re-checked"
+  IO.println "-- end-to-end corpus"
   let mut n := 0
   for f in corpus do
     n := n + 1
@@ -89,16 +119,8 @@ def main (args : List String) : IO UInt32 := do
     | none =>
       IO.println s!"ok   {f.name}: a0={r.a0.toNat} steps={r.stats.steps} hashes={r.stats.hashes} \
         ordinary={r.stats.ordinary} cost={r.stats.cost hashCost}"
-  IO.println "-- end-to-end corpus, implementation B build"
-  let mut nB := 0
-  for f in corpus do
-    nB := nB + 1
-    let (err, r) := checkFixtureWith verifierCodeB f
-    match err with
-    | some msg => failures := failures + 1; IO.println s!"FAIL [B] {msg}"
-    | none =>
-      if r.a0 == 1 then
-        IO.println s!"ok   [B] {f.name}: steps={r.stats.steps} hashes={r.stats.hashes} \
-          ordinary={r.stats.ordinary} cost={r.stats.cost hashCost}"
-  IO.println s!"{n} fixtures (A), {nB} fixtures (B), {nChain} chain cases, {nRegion} chains/leaf cases, {nDecode} decode cases, {nAuth} auth cases, {componentChecks.length} bridge checks, {failures} failures"
+  IO.println s!"{n} fixtures, {nChain} chain cases, {nRegion} chains/leaf cases, \
+    {nDecode} decode cases, {nAuth} auth cases, {nCost} cost cases, \
+    {rejects.length} archived rejects, \
+    {componentChecks.length} bridge checks, {failures} failures"
   return if failures = 0 then 0 else 1

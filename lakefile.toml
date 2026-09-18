@@ -110,6 +110,14 @@ name = "axiomsweep"
 root = "XmssAsmTools.AxiomSweep"
 supportInterpreter = true
 
+# Statement integrity for the optimization gate (`scripts/accept.sh` step 1):
+# prints the elaborated form of the frozen vocabulary, which the script hashes
+# against `bench/statement.sha256`.
+[[lean_exe]]
+name = "statementpin"
+root = "XmssAsmTools.StatementPin"
+supportInterpreter = true
+
 # The executable checks (PLAN E2/E3): test hash, fixtures, differential
 # harness, cycle report. Not imported by any theorem.
 [[lean_lib]]
@@ -120,3 +128,21 @@ name = "XmssAsmTests"
 [[lean_exe]]
 name = "difftest"
 root = "XmssAsmTests.Main"
+
+# The inner loop of the autoresearch harness (PLAN M9): interpreter-only
+# filters that build without any region proof, so a wrong candidate costs
+# seconds to reject. Never a merge gate.
+[[lean_exe]]
+name = "filter"
+root = "XmssAsmTests.Filter"
+
+# The machine-readable metric dump the accept gate compares against
+# `bench/baseline.txt`.
+[[lean_exe]]
+name = "bench"
+root = "XmssAsmTests.Bench"
+
+# Region-by-region virtual-cycle breakdown, including the OTS subtotal.
+[[lean_exe]]
+name = "cycles"
+root = "XmssAsmTests.Cycles"

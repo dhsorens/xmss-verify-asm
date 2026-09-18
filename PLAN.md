@@ -2,7 +2,7 @@
 
 The work queue and current design decisions. **Start here.** `README.md` is the repository contract; this file records what remains to be implemented and proved. Nothing here is frozen.
 
-Dates are absolute. Today is 2026-09-17; the repository is still a scaffold.
+Dates are absolute. Today is 2026-09-18.
 
 ---
 
@@ -91,6 +91,12 @@ proved, not assumed. `#print axioms` reports `propext`, `Classical.choice`,
 proves the differential harness builds a state satisfying that precondition
 (PLAN E2), and `initState_verify` is the theorem applied to it. Baseline cycle
 measurements are in `docs/CONTRACT.md`.
+
+Next is **M8.a**: collapse the M3 dual chain-walk to one program on main
+(the hoisted walk, today's B), freeze the OTS / XMSS cost function and
+invariants, and install a single accept gate. Then M8.b (overwrite that
+artifact only on a strict metric record) and M9 (untrusted agent, same
+gate, `chainWalk` plus local proof repair).
 
 The project target is:
 
@@ -478,7 +484,7 @@ candidate RV bytecode
 
 The optimizer itself is untrusted.
 
-A candidate is accepted only if it passes the proof and improves the benchmark.
+A candidate **passes the gate** only if it passes the proof, meets the exact hash pin, and does not regress the frozen metric (`m ≤ baseline`). It is a **new record** (and the only case that updates the committed baseline) only if it also strictly improves that metric (`m < baseline`).
 
 ---
 
@@ -640,9 +646,9 @@ a fixed benchmark corpus
 
 For the initial challenge, prefer a metric that is deterministic and difficult for an optimizer to game.
 
-If valid verification has effectively fixed work because of the XMSS target-sum construction, document and prove the relevant fact rather than assuming it.
+If valid verification has effectively fixed work because of the XMSS target-sum construction, document and prove the relevant fact rather than assuming it. M8.a must also establish the auth-path formula `auth_steps(ep) = C + 3 * popcount(ep)` so that `valid-epmax` (`ep = 2^32 - 1`) is justified as the maximum-cost accepting XMSS run, not merely observed on the current fixtures.
 
-**Agent rule:** settle the benchmark path semantics before M9. Do not compare candidate programs using accidentally different execution paths.
+**Agent rule:** settle the benchmark path semantics before M9. Do not compare candidate programs using accidentally different execution paths. M8.a freezes this: primary `OTS_steps` on an accepting path; secondary `XMSS_steps` on `valid-epmax`; `hashes_OTS = 101` and `hashes_XMSS = 133` exactly; `idxAuth` is the OTS stopping point.
 
 ### R4. The abstract hash boundary extends the execution model
 
@@ -812,8 +818,9 @@ Use the following checkpoints:
 | **M3** | two different `recoverChain` implementations can satisfy the same semantic contract without changing caller proofs |
 | **M5** | bit-level automation remains local and proof-check time is suitable for iteration |
 | **M7** | end-to-end theorem includes equivalence, termination, and frame behavior without depending unnecessarily on exact instruction layout |
-| **M8** | proof and evaluator demonstrably consume the same program artifact; benchmark semantics are documented |
-| **M9** | adversarial review confirms that passing both gates captures the intended notion of a correct and improved candidate |
+| **M8.a** | exactly one `Program` on main; cost function, hash pin, and the semantic OTS cut frozen; `auth_steps` formula established; accept script checks statement integrity, the hash pin, OTS constancy, and a proof-time budget, and measures the proved `Program` |
+| **M8.b** | a land is a new record (`(OTS, XMSS_epmax) < baseline`) without weakening `VerifierCorrect` |
+| **M9** | `chainWalk` search with proof repair always allowed; frozen invariants; two-tier loop; passing the accept gate without a record is not an improvement |
 
 ---
 
@@ -1374,89 +1381,430 @@ Run the complete end-to-end differential suite using the same deterministic exec
 
 ### M8. Verified optimization
 
-Optimize the complete verifier and its component regions using the infrastructure established in M2 and validated in M3.
+The M3 dual walk (`chainWalkA` / `chainWalkB`, `verifier` / `verifierB`) was a
+proof-architecture checkpoint: two sequences, one contract, four declared
+swap sites. It is not how main should look during optimization. M8.a
+collapses that dual, freezes the metric and the optimization contract, and
+installs the accept gate. M8.b is the first *new record* after that
+baseline. From M8.a on, do not retain alternate candidate implementations
+in-tree; `main` is the single best-known artifact and Git history is the
+leaderboard.
 
-Every candidate must pass correctness before being considered a valid optimization:
+#### M8.a Single artifact, frozen metric, accept gate
+
+Do this before any further optimization or harness work.
+
+**One program on main.** The artifact becomes the hoisted chain walk (today's
+`chainWalkB`: 20 instructions, constants out of the loop). Delete
+`chainWalkA`, `verifierB` / `verifierCodeB`, `implB` / `buildB`, and the
+second named proof `chainWalkB_correct`. The surviving body is `chainWalk`;
+its proof is `chainWalk_correct`. `difftest` and `lake exe cycles` run that
+one code map. Git history keeps the A→B→A experiment; main does not.
+
+This is also a cycle win relative to the M7 baseline (A): OTS 3231 → 2634
+steps, XMSS `valid-epmax` 4427 → 3830, both still 101 / 133 hash calls.
+Record those post-collapse numbers as the M8.a baseline. Static size 183.
+
+**Cost function** (lexicographic; hashes are an exact pin, not a score term):
 
 ```text
-candidate
-   |
-   +---- proof/tests ---- fail ----> reject
-   |
-   +---- proof/tests ---- pass
-                            |
-                            v
-                       measure cost
+primary:    OTS_steps on an accepting path
+secondary:  XMSS_steps on fixture valid-epmax
+constraint: hashes_OTS  = 101
+            hashes_XMSS = 133
+            E1 + E2 + E3 pass, xmss_verify_correct holds
 ```
 
-Track at least:
+OTS means init + decode + 42 WOTS chains + leaf, stopping at `idxAuth`.
+That cut is part of the optimization contract: a candidate must not move
+work past the cut merely to shrink `OTS_steps`.
 
-- static instruction count;
-- executed ordinary RV instructions;
-- abstract hash calls;
-- total synthetic cost;
-- proof-check time.
+The cut is **semantic, not numeric**: it is the boundary after the leaf hash
+and before the first authentication instruction, however the program is
+renumbered. `idxAuth` is *not* a constant -- it is
+`idxLeaf + leaf.length`, so it moves whenever the chain walk's length moves,
+and M9 explicitly permits changing any index that is a function of that
+length. What is immutable is which work falls on each side of the boundary,
+not the number that names it.
 
-Maintain a reproducible baseline so every claimed improvement has a concrete comparison point.
+OTS `steps` is constant on every accepting fixture: target-sum 195 forces 99
+remaining chain hashes, plus 1 encoding and 1 leaf. That constancy is a
+property of the current program, not of every candidate -- a walk with a
+digit-dependent fast path would break it and make "an accepting path"
+ambiguous. The accept gate therefore **asserts** it: `OTS_steps` must agree
+across all accepting fixtures, and a candidate whose OTS cost varies by
+fixture fails the gate. This is why no held-out fixture corpus is needed.
 
-Optimizations may alter instruction sequences, register allocation, control flow, or region implementations, but may not weaken the theorem or evaluation criteria.
+XMSS on `valid-epmax` is the worst-case accepting run. M8.a must prove or
+mechanically establish
+
+```text
+auth_steps(ep) = C + 3 * popcount(ep)
+```
+
+for a documented constant `C` (the all-zero-epoch auth cost). Then
+`ep = 2^32 - 1` is the unique maximum-cost accepting epoch, not an
+observation on the current fixtures. Do not average over random epochs.
+
+The exact hash pin keeps the problem on RV instruction overhead. Extra
+oracle queries can still satisfy `VerifierCorrect`; they fail the gate
+anyway. `hashCost` stays as a reporting parameter; among candidates that
+meet the pin it does not change the ranking. At `hashCost = 1`,
+`cost = steps`.
+
+**Stretch target: `OTS_steps = 512`.** Recorded here as what "really good"
+would look like, not as a gate condition. The gate is `m <= baseline` and
+stays that way; 512 is a marker to aim at, and a candidate that misses it is
+not thereby a failure.
+
+It is a hard target, and worth writing down why, so that work aims at the
+right regions. The OTS path today is 2139 steps:
+
+```text
+  init (encoding hash)      43
+  decode digits            222
+  42 chain walks          1858
+  leaf hash                 16
+                          ----
+                          2139
+```
+
+and the 1858 breaks down as 42 x 20 chain-loop overhead (load 9, store 10,
+branch 1) + 42 x 10 walk prologue + 99 x 5 per-step work + 99 hash `ECALL`s
++ 4 for the loop header. So:
+
+- the 101 hash `ECALL`s of the OTS path are 101 steps that cannot go, since
+  the hash pin is an equality. That is a fifth of the target on its own;
+- each chain step must write a *different* tweak word (the position
+  changes), so roughly one store per step, ~99 more, is close to forced;
+- that leaves ~310 steps for everything else: reading 42 chain values,
+  extracting and target-sum-checking 42 digits, the leaf payload, and all
+  loop control. Decode alone is 222 today.
+
+Reaching 512 therefore needs more than the `chainWalk` search space M9 opens:
+`decode` and the chain load/store overhead have to come down too, and the
+per-step work has to approach the `ECALL`-plus-one-store floor. Opening those
+regions is a deliberate decision, not a consequence of this target -- M9's
+restriction to `chainWalk` stands until that loop has been run and reviewed,
+and the stopping points and hash pin stay frozen either way.
+
+Do **not** put in the score: reject-path cost, static instruction count,
+wall time, proof-check latency, or ots.golf compressions (this evaluator
+charges one unit per hash `ECALL` regardless of input length). Reject
+fixtures remain a termination / fuel filter. Size is a tie-break at most.
+Proof-check time is recorded for every gate-passing candidate as an
+engineering constraint on autoresearch throughput (R10), not as part of
+the verifier performance objective.
+
+**Gate vs record.** Distinguish a candidate that passes without regressing
+from a candidate that is a new record. Let
+`m = (OTS_steps, XMSS_epmax_steps)` in lexicographic order.
+
+```text
+gate pass:   proofs + tests + hashes_OTS = 101 + hashes_XMSS = 133
+             and  m ≤ baseline
+new record:  gate pass and  m < baseline
+```
+
+Only a new record updates the committed baseline and may be called an
+improvement. A gate pass with `m = baseline` is allowed (refactor, proof
+cleanup) and does not change the record. A candidate with `m > baseline`
+fails the gate, even if the theorem holds.
+
+**Accept gate.** One script (`scripts/accept.sh` or equivalent):
+
+1. **statement integrity.** Check that the `VerifierCorrect` and
+   `Represents` definitions are byte-identical to their pinned form. A
+   weakened statement -- an added hypothesis, a dropped conjunct -- builds
+   cleanly, passes the axiom sweep, passes every fixture, and scores
+   better. Nothing else in this list catches it, so it is checked first;
+2. `lake build` (`xmss_verify_correct` typechecks), under a **wall-clock
+   budget**; exceeding the budget is a reject, not a slow pass. Proof-check
+   time is excluded from the score but bounded as a gate condition, because
+   a single candidate must not be able to stall the loop (R10);
+3. `scripts/check-axioms.sh` and `scripts/check-forbidden-tactics.sh`;
+4. `scripts/test-differential.sh` (the one program);
+5. assert the hash pin (`hashes_OTS = 101`, `hashes_XMSS = 133`) and assert
+   that `OTS_steps` is equal across all accepting fixtures;
+6. dump `OTS_steps`, `XMSS_epmax_steps`, hash counts, and proof-check
+   time against a **machine-readable baseline** committed in-tree;
+7. exit non-zero on statement, proof, timeout, test, hash-pin,
+   OTS-constancy, or `m > baseline` failure; exit 0 on gate pass; update
+   the baseline file only on a new record.
+
+The theorem and the evaluator consume the same `Program` value (R7).
+`lake exe cycles` is the region-split report (OTS vs Merkle); tighten it to
+the single program and, if the accept script needs it, a parseable dump.
+`main` is the single best-known artifact. Git is the leaderboard.
+
+There is no theorem that a given `Program` is *optimal*. The loop is
+best-so-far. A lower bound (ots.golf-style) is a different project.
+
+**Frozen before M9** (the optimization contract; a candidate that changes
+any of these is out of spec, not an optimization):
+
+- the same canonical `Program` is both proved and measured;
+- the `VerifierCorrect` theorem statement cannot change;
+- the machine / input representation cannot change;
+- the hash-oracle semantics cannot change;
+- benchmark inputs and stopping points cannot change (`idxAuth` for OTS;
+  full run on `valid-epmax` for XMSS);
+- hash counts remain pinned at 101 / 133;
+- only a strict metric improvement (`m < baseline`) updates the committed
+  baseline;
+- the **scoreboard and the gate itself are not candidate material**: the
+  committed baseline file, `scripts/accept.sh`, `scripts/check-axioms.sh`,
+  `scripts/check-forbidden-tactics.sh`, `scripts/test-differential.sh` and
+  the fixture corpus are off limits to a candidate. Editing a number in the
+  baseline file is cheaper than weakening a proof, and step 6 writes to
+  that file; a denylist that protects the theorem but not the scoreboard is
+  exactly the mismatch R8 warns about. Only a human, in a separate commit,
+  changes the gate or the corpus.
+
+When whole-program optimization is later enabled, region boundaries and
+those stopping points stay immutable unless the metric is redesigned.
+
+**Correctness of a land.** Every candidate that lands on `main` must
+re-establish the *unchanged* `xmss_verify_correct` / `VerifierCorrect`
+theorem for the *exact* `Program` the evaluator measures. A green
+differential suite is never a substitute for that proof.
+
+**Proof repair is always permitted** in M8 and M9. A candidate may edit
+local proofs of the affected region so that they close again. Validity
+still requires that those proofs re-establish the *same* local contracts
+(`ChainWalkPre` / `ChainWalkPost`, and so on) *and* the unchanged
+top-level `xmss_verify_correct`. Weakening a contract, changing the
+theorem statement, or landing with `sorry` is out of spec.
+
+Proof robustness is an **iteration goal**, not a restriction on the
+search and not a soundness assumption. Tactful `simp` / `grind`, local
+contracts, and region insulation should make most `chainWalk` edits cheap
+to re-close — ideally no repair above the affected region (`chainWalk_correct`
+re-closes; `chains_correct` and `Verify.lean` stay untouched). If a change
+forces broader proof edits, the architecture missed that goal; the
+candidate can still land once the repaired proofs meet the bar above.
 
 **Acceptance criteria:**
 
-- an explicit baseline is recorded;
-- at least one nontrivial optimization is attempted;
-- accepted optimized candidates pass the same E1, E2, and E3 gates as the baseline;
-- performance comparisons use the same benchmark semantics;
-- higher-level proofs remain insulated from local implementation changes where intended;
-- benchmark results are reproducible.
+- exactly one RV implementation of the verifier on main; no in-tree
+  alternate candidates;
+- `chainWalk_correct` is the only chain-walk correctness theorem in the
+  artifact; callers still go through that contract;
+- cost function, gate-vs-record rule, hash pin, and stopping points are
+  documented here and in `docs/CONTRACT.md`;
+- `auth_steps(ep) = C + 3 * popcount(ep)` is proved or mechanically
+  established, so `valid-epmax` is justified as worst-case accepting XMSS;
+- a machine-readable baseline is committed (OTS 2634 / 101 hashes; XMSS
+  epmax 3830 / 133 hashes, after the collapse);
+- one accept command implements gate pass (`m ≤ baseline`) vs new record
+  (`m < baseline`), with hashes exact, statement integrity checked
+  mechanically, `OTS_steps` asserted equal across accepting fixtures, and a
+  proof-check wall-clock budget enforced;
+- the baseline file, gate scripts, and fixture corpus are documented as
+  off limits to candidates;
+- a land re-establishes unchanged `xmss_verify_correct` for the measured
+  `Program`; differential tests are not a substitute;
+- dual A/B builds, dual cycle reports, and `verifierB` are gone;
+- `lake build` is warning-free; E1/E2/E3 pass on the single program.
+
+**Stop condition:** if tests or the evaluator still take a `Build` / `code`
+parameter that can silently measure a different `Program` than
+`xmss_verify_correct`, fix that before M8.b.
+
+#### M8.b Overwrite the artifact
+
+From the M8.a baseline, optimize the single program. A candidate is a
+**patch to that program** (start with `chainWalk`; later regions only when
+explicitly opened), never a second `implC` living next to it.
+
+```text
+candidate patch
+       |
+       +---- proof/tests/hash pin ---- fail ----> reject
+       |
+       +---- gate: m ≤ baseline
+                     |
+                     +---- m = baseline ----> gate pass, not a record
+                     |                        (do not update baseline)
+                     |
+                     +---- m < baseline ----> new record:
+                                              overwrite main, update baseline
+```
+
+Track at least (report; only the frozen pair is the score):
+
+- static instruction count;
+- executed ordinary RV instructions;
+- abstract hash calls (must be 101 / 133);
+- total synthetic cost at the documented `hashCost`;
+- proof-check time (recorded, not scored).
+
+A new record *overwrites* the previous implementation. The previous record
+is the last commit and the old baseline line, not a retained alternate
+`Program`.
+
+**Instructive rejects are kept, as fixtures rather than as programs.** The
+no-alternates rule bans a live alternate `Program` that a caller could
+select; it does not ban recording what went wrong. A candidate that failed
+for a reason worth remembering -- lost termination, broke the hash pin,
+regressed the metric in a non-obvious way, needed proof repair above its
+region -- is recorded in `XmssAsmTests/Rejects.lean` as an instruction list
+plus the expected failure, and the suite asserts it still fails for that
+reason. Those lists are test data: nothing outside the reject suite may
+refer to them, and they are never reachable from `verifier`.
+
+The four swap sites (`chainWalk`, `chainWalk_length`, `bOff_chainsLoop`,
+`chainWalk_correct`) are the interface. Proof repair of the walk (and, if
+needed, its local proof file) is always allowed. Robustness — re-closing
+with existing automation, no edits above the region — is the iteration
+goal (`simp` / `grind`, stable contracts). Soundness does not assume it
+succeeded. After any repair, the land is valid only if the same local
+contracts and the unchanged `xmss_verify_correct` hold for the measured
+program. A candidate may not weaken `VerifierCorrect`, the hash pin, the
+stopping points, or the cost-function paths. Differential tests do not
+replace that theorem.
+
+The M8.a collapse (A → hoisted walk) does **not** close M8.b. M8.b requires
+at least one further candidate attempted against that baseline. Landing a
+new record is optional; attempting it is not.
+
+**Acceptance criteria:**
+
+- at least one nontrivial candidate is attempted from the M8.a baseline;
+- any overwrite of main is a new record (`m < baseline`), re-establishes
+  unchanged `xmss_verify_correct` for the measured `Program`, and passes
+  E1, E2, E3 with hashes exact; tests are not a substitute for the proof;
+- performance comparisons use the M8.a paths (accepting OTS; XMSS on
+  `valid-epmax`), never a lucky random epoch;
+- higher-level proofs remain insulated from the local instruction sequence
+  where M3 intended (iteration goal; repair above the region is allowed
+  but is a robustness miss);
+- benchmark results are reproducible from the committed `Program` and
+  baseline file;
+- proof-check time is recorded for every gate-passing candidate.
 
 ---
 
 ### M9. Autoresearch harness
 
-Package the proof and evaluation infrastructure so an untrusted automated agent can propose RV implementation changes and receive objective feedback.
+Package the M8.a accept gate so an untrusted agent can propose a patch and
+get a yes/no plus numbers. The optimizer is not trusted. Correctness is
+the same theorem and gates as manual work. The M8.a frozen invariants
+remain in force.
 
-The intended loop is:
+**Search space (first version): `chainWalk` only**, plus whatever local
+proof repair that body needs. The untrusted optimizer may modify:
+
+- the designated RV implementation region (`chainWalk` / `chainStep`);
+- mechanically necessary offsets / lengths (`chainWalk_length`,
+  `bOff_chainsLoop`, and any index that is a function of that length);
+- local proofs of that region (`XmssAsm/Regions/Chain.lean`, and the
+  `chainWalk_correct` selector).
+
+It may **not** modify theorem *statements* (`VerifierCorrect`,
+`xmss_verify_correct`), specification code, representation predicates,
+hash semantics, or benchmark definitions. It may **not** touch the
+scoreboard or the gate: the committed baseline file, `scripts/accept.sh`,
+the two trust-gate scripts, `scripts/test-differential.sh`, or the fixture
+corpus. Lowering a baseline number is the cheapest cheat available and is
+easier than weakening a proof, so the boundary is enforced mechanically
+(the accept script rejects a candidate diff that touches any denied path)
+rather than assumed. Restricting the *code* search
+to `chainWalk` keeps failures local and interpretable and avoids
+conflating optimizer quality with whole-program proof-architecture
+issues. Do not open other regions, and do not enable whole-program
+search, until this `chainWalk` loop has been run and reviewed.
+
+Proof repair is part of the loop, not a later mode. The Lean kernel is
+the trust boundary: after repair, the same local contracts and the
+unchanged top-level theorem must close. Prefer that existing `simp` /
+`grind` and region insulation re-close with no edit above
+`chainWalk_correct`; that is infrastructure quality, not a harness ban
+on touching proofs.
+
+Two tiers (keep this split):
+
+*Inner loop (search).* Untrusted cheap filters on `chainWalk` mutations:
+digit `0..7` chain tests, `OTS_steps` on one accepting fixture, hash pin.
+Reject obvious losers. This loop must not land on main by itself.
+
+*Land on main.* `scripts/accept.sh`. The land must re-establish the
+unchanged `xmss_verify_correct` for the exact `Program` being measured.
+If `chainWalk_correct` / `xmss_verify_correct` does not close, the
+candidate does not merge, even when `difftest` is green. Differential
+tests are never a substitute for the formal proof and are not the merge
+gate. A land that is a new record updates the baseline; a gate pass that
+is not a record does not.
 
 ```text
-propose candidate
+propose patch to chainWalk (+ mechanical offsets/lengths
+       + local proof repair, always allowed)
        |
        v
-   Lean build
+  (optional) inner-loop filters
+       |
+       v
+  scripts/accept.sh          (E1, E2, E3, metric dump, hash pin)
        |
        +---- fail -----------------> reject
        |
        v
-differential tests
+  m ≤ baseline                 (gate pass)
        |
-       +---- fail -----------------> reject
+       +---- m = baseline --------> not a record; do not update baseline
        |
-       v
- cycle evaluator
-       |
-       v
-compare with baseline/best candidate
-       |
-       +---- no improvement -------> reject
-       |
-       v
-      accept
+       +---- m < baseline --------> new record:
+                                    overwrite main, update baseline,
+                                    record Program + metrics
+                                    + proof-check time
 ```
 
-The optimizer itself is not trusted.
+Because the first search rewrites only `chainWalk`, OTS and XMSS move by
+the same Δ; XMSS is then a sanity check, not a second objective. Do not
+treat that as a reason to drop the lex pair: the frozen metric stays in
+place for later whole-program work, where an OTS-only cut is gameable by
+pushing work past `idxAuth`. Whole-program search, if enabled, still
+cannot move those stopping points.
 
-Correctness comes from the same proof and evaluation gates used during manual development.
+The harness records enough to reproduce every *new record*: the `Program`
+literal (or the commit that is that literal), the metric dump, proof-check
+time, and which baseline it beat. `main` remains the single best-known
+artifact. Git is the leaderboard. Do not keep losing or tied candidates
+in-tree **as programs** -- but do record instructive rejects as fixtures in
+`XmssAsmTests/Rejects.lean` (see M8.b), which is test data and not a
+selectable implementation.
 
-The harness should record enough information to reproduce every accepted result, including the program artifact and measured cost.
+Every candidate runs under a wall-clock budget for the proof check, and
+exceeding it is a reject. Proof-check time stays out of the score and in
+the record; the budget exists so one pathological candidate cannot stall
+the search. This codebase is sensitive to it: one authentication-path proof
+went from a hard timeout to nine seconds purely by changing when values
+were rewritten into the symbolic state.
 
 **Acceptance criteria:**
 
-- one documented command runs the candidate evaluation pipeline;
-- incorrect candidates cannot reach the performance-acceptance stage;
-- proof, tests, and evaluator operate on the intended candidate artifact;
-- accepted candidates and their measurements are reproducible;
-- the best-known baseline and candidate costs are recorded;
-- proof-check and evaluation latency are practical enough for repeated automated search.
+- one documented command evaluates a candidate end-to-end;
+- incorrect candidates cannot reach performance-acceptance;
+- every land re-establishes unchanged `xmss_verify_correct` for the
+  measured `Program`; differential tests are never a substitute;
+- proof, tests, and evaluator operate on the same candidate `Program`;
+- the mutation boundary is enforced mechanically, by rejecting a candidate
+  diff that touches a denied path: `chainWalk` plus mechanical
+  offsets/lengths plus local proof repair are allowed; theorem statements,
+  spec, representation, hash semantics, benchmark definitions, the baseline
+  file, the gate scripts and the fixture corpus are not;
+- statement integrity is checked mechanically on every land, not assumed;
+- a proof-check wall-clock budget is enforced, and exceeding it rejects;
+- instructive rejects are recorded as fixtures, not as selectable
+  programs;
+- proof repair is always allowed; robustness (`simp` / `grind`, region
+  insulation) is the iteration goal, not a code-only restriction;
+- accepted new records and measurements are reproducible, including
+  recorded proof-check time;
+- the baseline file updates only on `m < baseline`; `main` has one
+  implementation;
+- proof-check and evaluation latency are practical enough for repeated
+  search (R10), as an engineering constraint, not a score term.
 
 ---
 
@@ -1472,8 +1820,9 @@ The harness should record enough information to reproduce every accepted result,
 | **M5** | reusable digit extraction plus target-sum decoding is verified |
 | **M6** | reusable authentication step composed across 32 levels is verified |
 | **M7** | complete RV verifier is proved equivalent to `Concrete.verify` |
-| **M8** | verified optimization produces reproducible performance comparisons |
-| **M9** | automated agents can safely search for better verified RV implementations |
+| **M8.a** | one program on main; cost function, hash pin, and stopping points frozen; `auth_steps` formula; accept gate distinguishes pass vs new record |
+| **M8.b** | a further candidate is attempted; main and the baseline update only on a strict metric record |
+| **M9** | `chainWalk` search with proof repair always allowed; two-tier loop; land only through the accept gate |
 
 ---
 

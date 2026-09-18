@@ -15,13 +15,13 @@ in the style of evm-asm, maybe using the refinement calculus and/or myreen decom
 
 ## Status
 
-**M1-M7 complete: the verifier is proved.**
+**M1-M9 complete: the verifier is proved, and optimization is gated and automated.**
 
 ```
 theorem xmss_verify_correct (H : HashInput → HashOutput) : VerifierCorrect H
 ```
 
-The artifact is `XmssAsm/Program/Verifier.lean`, 185 RV64IM instructions. The
+The artifact is `XmssAsm/Program/Verifier.lean`, 179 RV64IM instructions. The
 theorem (`XmssAsm/Verify.lean`) says that for every hash oracle `H`, starting
 from any machine state whose memory represents `(pk, ep, msg, sig)` with the
 program loaded at `CODE_BASE`, execution terminates in a halted state whose
@@ -31,13 +31,24 @@ and `Quot.sound` only.
 
 The proof is six region contracts composed with `Runs.bind`: init, decode,
 the 42-chain loop, leaf, the 32-level authentication path, and the final
-compare. The chain walk has two interchangeable implementations proved against
-one contract, and switching between them touches four definitions and no proof.
+compare. A chain-walk change touches four definitions -- the program, its
+length, one branch offset and one theorem -- and no proof above the region.
+
+Step counts are theorems too where they can be: the authentication path costs
+`1090 + 3 * popcount32 ep` steps (`XmssAsm/Regions/AuthCost.lean`), so the
+worst-case accepting epoch is `2^32 - 1` by proof rather than by sampling.
 
 Independently of the proof, the program is executed by an RV interpreter and
 compared with the specification on 104 end-to-end fixtures and 450 component
-cases (`scripts/test-differential.sh`), all passing. `PLAN.md` is the work
-queue; M8 (verified optimization) is what remains.
+cases (`scripts/test-differential.sh`), all passing.
+
+An accepting verification costs 3239 virtual cycles at epoch 0 and 3335 at the
+worst-case epoch, of which 2139 are the one-time signature (init, decode, 42
+WOTS chains, leaf); 133 abstract hash calls either way. `scripts/accept.sh`
+judges a change against `bench/baseline.txt`, and `scripts/autoresearch.sh`
+wraps it with the mutation boundary and a cheap pre-filter for candidates from
+an untrusted optimizer; `AUTORESEARCH.md` is the prompt for pointing an agent
+at that loop. `PLAN.md` is the work queue.
 
 ## The stack
 
@@ -93,9 +104,11 @@ XmssAsm/Regions/          region contracts and their machine proofs
 XmssAsm/Smoke.lean        wiring check: a Program, cpsTotal and Nres all in scope
 XmssAsm/Spec.lean         imports XmssSecurity.Scheme and pins the names the bridge will use
 XmssAsmTests/             test hash, fixtures, differential harness (not trusted)
-XmssAsmTools/             the axiom gate (not imported by any theorem)
-scripts/                  check-axioms.sh, check-forbidden-tactics.sh, test-differential.sh
-docs/CONTRACT.md          the contract, layout, cost model, adversarial review
+XmssAsmTools/             the axiom gate and the statement pin (not imported by any theorem)
+scripts/                  check-axioms.sh, check-forbidden-tactics.sh, test-differential.sh, accept.sh
+bench/                    the committed baseline and the pins (the scoreboard)
+AUTORESEARCH.md           the prompt for running the optimization loop with an agent
+docs/CONTRACT.md          the contract, layout, cost model, optimization contract, adversarial review
 PLAN.md                   the work queue and open decisions
 AGENTS.md                 standing rules
 ```
@@ -104,10 +117,32 @@ AGENTS.md                 standing rules
 
 ```bash
 lake exe cache get        # Mathlib oleans; without it, an hour
-lake build                # XmssAsm + XmssAsmTools
+lake build                # XmssAsm + XmssAsmTools + XmssAsmTests
 scripts/check-axioms.sh
 scripts/check-forbidden-tactics.sh
+scripts/test-differential.sh
 ```
+
+One command judges a change to the verifier program end to end:
+
+```bash
+scripts/accept.sh         # statement pin, proofs, gates, tests, hash pin, score
+```
+
+It exits 0 on a gate pass and 1 on a reject, and prints the score against
+`bench/baseline.txt`. For a candidate from an untrusted optimizer, the command
+is one level up:
+
+```bash
+scripts/autoresearch.sh   # mutation boundary, cheap filter, then the gate
+```
+
+`lake exe filter` is the cheap tier on its own (the interpreter, no proofs, so
+it rejects a wrong chain walk in seconds), `lake exe bench` the metric dump the
+gate consumes, and `lake exe cycles` the region-by-region report. See "The
+optimization contract" in `docs/CONTRACT.md` for what is frozen, what is off
+limits to a candidate, and the difference between a gate pass and a new
+record. The current record is `(2139, 3335)`, landed through that harness.
 
 The first build also compiles `VCVio` and `XmssSecurity.Scheme` from source
 (no release oleans); `riscv-zkvm` builds from source too, but its import

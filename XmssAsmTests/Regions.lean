@@ -75,14 +75,6 @@ def runUntil (H : List UInt8 → BitVec 256) :
       runUntil H fuel s' target
         { steps := st.steps + 1, hashes := st.hashes + (if isHashCall s then 1 else 0) }
 
-/-- A chain-walk implementation under test: its code map and where it ends. -/
-structure ChainImpl where
-  name : String
-  code : CodeMem
-  endIdx : Nat
-
-def implA : ChainImpl := ⟨"A", verifierCode, idxChainWalk + chainWalk.length⟩
-def implB : ChainImpl := ⟨"B", verifierCodeB, idxChainWalk + chainWalkB.length⟩
 
 /-- Non-zero, address-dependent memory contents, so that a stray store shows. -/
 def sentinelMem (a : Word) : Word := a * 0x9E3779B97F4A7C15#64 + 0x0101010101010101#64
@@ -95,17 +87,33 @@ def allRegs : List Reg :=
 def layoutCells : List Word :=
   (List.range ((SCRATCH_HI.toNat - ROOT.toNat) / 8)).map fun k => ROOT + BitVec.ofNat 64 (8 * k)
 
-def inWChain (a : Word) : Bool :=
-  (BUFA.toNat ≤ a.toNat && a.toNat < BUFA.toNat + 16) ||
-  (CUR.toNat ≤ a.toNat && a.toNat < CUR.toNat + 16) ||
-  (OUT.toNat ≤ a.toNat && a.toNat < OUT.toNat + 32)
+/-! ### The executable frame checks
+
+Each is `decide` of the *same* `Prop` the region theorem's `Frame` uses, not a
+hand-written copy of it. A copy drifts the first time a candidate changes a
+write set, and it drifts silently: the theorem still holds, the mirror still
+evaluates, and the suite reports a frame violation that is not there (or, worse,
+misses one that is). -/
+
+instance WChain.decidable (a : Word) : Decidable (WChain a) := by
+  unfold WChain; infer_instance
+instance WChains.decidable (a : Word) : Decidable (WChains a) := by
+  unfold WChains; infer_instance
+instance WLeaf.decidable (a : Word) : Decidable (WLeaf a) := by
+  unfold WLeaf; infer_instance
+instance WDecode.decidable (a : Word) : Decidable (WDecode a) := by
+  unfold WDecode; infer_instance
+instance WAuth.decidable (a : Word) : Decidable (WAuth a) := by
+  unfold WAuth; infer_instance
+
+def inWChain (a : Word) : Bool := decide (WChain a)
 
 /-- The entry state of a chain walk: the contract's precondition on top of
     sentinel registers and memory. -/
-def chainState (impl : ChainImpl) (P : PublicParameter) (ep : Epoch) (i : ChainIndex) (x : Digit)
+def chainState (P : PublicParameter) (ep : Epoch) (i : ChainIndex) (x : Digit)
     (v : Digest) : MachineState :=
   let s : MachineState :=
-    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := impl.code, pc := addr idxChainWalk }
+    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := verifierCode, pc := addr idxChainWalk }
   let s := (((((s.setReg .x8 (BitVec.ofNat 64 ep.val)).setReg .x14 (BitVec.ofNat 64 x.val)).setReg
     .x16 (BitVec.ofNat 64 (8 * i.val))).setReg .x13 (BitVec.ofNat 64 i.val)).setReg
     .x18 ENDPTS).setReg .x19 DIGITS
@@ -122,9 +130,9 @@ structure ChainCase where
   v : Digest
 
 /-- Run one chain case on one implementation; `none` on success. -/
-def checkChain (impl : ChainImpl) (c : ChainCase) : Option String × Stats :=
-  let s := chainState impl c.P c.ep c.i c.x c.v
-  let (s', st, reached) := runUntil H_test 1000 s (addr impl.endIdx) {}
+def checkChain (c : ChainCase) : Option String × Stats :=
+  let s := chainState c.P c.ep c.i c.x c.v
+  let (s', st, reached) := runUntil H_test 1000 s (addr idxChainStore) {}
   let expected := evalD (Concrete.recoverChain c.P c.ep c.i c.x c.v)
   let got := readDigest s' CUR
   let keepOk := [Reg.x8, .x13, .x16, .x18, .x19].all fun r => s'.getReg r == s.getReg r
@@ -132,13 +140,13 @@ def checkChain (impl : ChainImpl) (c : ChainCase) : Option String × Stats :=
   let frameOk := layoutCells.all fun a => inWChain a || s'.getMem a == s.getMem a
   let pOk := readDigest s' BUFA_P == c.P
   let err :=
-    if !reached then some s!"{c.name}[{impl.name}]: did not reach the region end (pc={s'.pc.toNat})"
-    else if got != expected then some s!"{c.name}[{impl.name}]: CUR mismatch"
-    else if !pOk then some s!"{c.name}[{impl.name}]: P clobbered"
-    else if !keepOk then some s!"{c.name}[{impl.name}]: caller register clobbered"
-    else if !clobOk then some s!"{c.name}[{impl.name}]: non-CLOB register written"
-    else if !frameOk then some s!"{c.name}[{impl.name}]: memory outside WChain written"
-    else if st.hashes != 7 - c.x.val then some s!"{c.name}[{impl.name}]: {st.hashes} hashes, expected {7 - c.x.val}"
+    if !reached then some s!"{c.name}: did not reach the region end (pc={s'.pc.toNat})"
+    else if got != expected then some s!"{c.name}: CUR mismatch"
+    else if !pOk then some s!"{c.name}: P clobbered"
+    else if !keepOk then some s!"{c.name}: caller register clobbered"
+    else if !clobOk then some s!"{c.name}: non-CLOB register written"
+    else if !frameOk then some s!"{c.name}: memory outside WChain written"
+    else if st.hashes != 7 - c.x.val then some s!"{c.name}: {st.hashes} hashes, expected {7 - c.x.val}"
     else none
   (err, st)
 
@@ -168,32 +176,17 @@ def chainCorpus : List ChainCase := Id.run do
   return out
 
 /-- Steps and hashes per digit for one implementation (starting digest zero, epoch 0, chain 0). -/
-def chainCycles (impl : ChainImpl) : List (Nat × Stats) :=
+def chainCycles : List (Nat × Stats) :=
   (List.range 8).map fun xn =>
     let c : ChainCase := ⟨"", 0, epochOf 0, ci 0, digit xn, 0⟩
-    (xn, (checkChain impl c).2)
+    (xn, (checkChain c).2)
 
 /-! ## The chains region and the leaf region in isolation -/
 
-/-- A verifier build: its code and the chain-walk length that fixes the later indices. -/
-structure Build where
-  name : String
-  code : CodeMem
-  cwLen : Nat
 
-def buildA : Build := ⟨"A", verifierCode, chainWalk.length⟩
-def buildB : Build := ⟨"B", verifierCodeB, chainWalkB.length⟩
+def inWChains (a : Word) : Bool := decide (WChains a)
 
-def Build.idxLeaf (b : Build) : Nat := 92 + b.cwLen
-def Build.idxAuth (b : Build) : Nat := 108 + b.cwLen
-
-def inWChains (a : Word) : Bool :=
-  inWChain a || (ENDPTS.toNat ≤ a.toNat && a.toNat < ENDPTS.toNat + 672)
-
-def inWLeaf (a : Word) : Bool :=
-  (BUFL.toNat ≤ a.toNat && a.toNat < BUFL.toNat + 16) ||
-  (CUR.toNat ≤ a.toNat && a.toNat < CUR.toNat + 16) ||
-  (OUT.toNat ≤ a.toNat && a.toNat < OUT.toNat + 32)
+def inWLeaf (a : Word) : Bool := decide (WLeaf a)
 
 structure ChainsCase where
   name : String
@@ -202,18 +195,18 @@ structure ChainsCase where
   cv : ChainIndex → Digest
   enc : Encoding
 
-def chainsState (b : Build) (c : ChainsCase) : MachineState :=
+def chainsState (c : ChainsCase) : MachineState :=
   let s : MachineState :=
-    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := b.code, pc := addr idxChains }
+    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := verifierCode, pc := addr idxChains }
   let s := s.setReg .x8 (BitVec.ofNat 64 c.ep.val)
   let s := s.writeWords BUFA_P [dLo c.P, dHi c.P]
   let s := s.writeWords CHAINS ((List.ofFn c.cv).flatMap digestWords)
   s.writeWords DIGITS ((List.ofFn c.enc).map fun d => BitVec.ofNat 64 d.val)
 
 /-- Run the chains region on a build; `none` on success. -/
-def checkChains (b : Build) (c : ChainsCase) : Option String × Stats :=
-  let s := chainsState b c
-  let (s', st, reached) := runUntil H_test 20000 s (addr b.idxLeaf) {}
+def checkChains (c : ChainsCase) : Option String × Stats :=
+  let s := chainsState c
+  let (s', st, reached) := runUntil H_test 20000 s (addr idxLeaf) {}
   let endOk := (List.range numChains).all fun j =>
     let jj : ChainIndex := ⟨j % numChains, Nat.mod_lt _ (by decide)⟩
     readDigest s' (ENDPTS + BitVec.ofNat 64 (16 * j)) ==
@@ -224,12 +217,12 @@ def checkChains (b : Build) (c : ChainsCase) : Option String × Stats :=
   let expectedHashes := (List.range numChains).foldl (fun acc j =>
     acc + (7 - (c.enc ⟨j % numChains, Nat.mod_lt _ (by decide)⟩).val)) 0
   let err :=
-    if !reached then some s!"{c.name}[{b.name}]: chains did not reach idxLeaf (pc={s'.pc.toNat})"
-    else if !endOk then some s!"{c.name}[{b.name}]: endpoint mismatch"
-    else if !keepOk then some s!"{c.name}[{b.name}]: x8 clobbered"
-    else if !clobOk then some s!"{c.name}[{b.name}]: non-CLOB register written"
-    else if !frameOk then some s!"{c.name}[{b.name}]: memory outside WChains written"
-    else if st.hashes != expectedHashes then some s!"{c.name}[{b.name}]: {st.hashes} hashes, expected {expectedHashes}"
+    if !reached then some s!"{c.name}: chains did not reach idxLeaf (pc={s'.pc.toNat})"
+    else if !endOk then some s!"{c.name}: endpoint mismatch"
+    else if !keepOk then some s!"{c.name}: x8 clobbered"
+    else if !clobOk then some s!"{c.name}: non-CLOB register written"
+    else if !frameOk then some s!"{c.name}: memory outside WChains written"
+    else if st.hashes != expectedHashes then some s!"{c.name}: {st.hashes} hashes, expected {expectedHashes}"
     else none
   (err, st)
 
@@ -265,28 +258,28 @@ structure LeafCase where
   ep : Epoch
   e : ChainIndex → Digest
 
-def leafState (b : Build) (c : LeafCase) : MachineState :=
+def leafState (c : LeafCase) : MachineState :=
   let s : MachineState :=
-    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := b.code, pc := addr b.idxLeaf }
+    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := verifierCode, pc := addr idxLeaf }
   let s := s.setReg .x8 (BitVec.ofNat 64 c.ep.val)
   let s := s.writeWords BUFL_P [dLo c.P, dHi c.P]
   s.writeWords ENDPTS ((List.ofFn c.e).flatMap digestWords)
 
-def checkLeaf (b : Build) (c : LeafCase) : Option String × Stats :=
-  let s := leafState b c
-  let (s', st, reached) := runUntil H_test 1000 s (addr b.idxAuth) {}
+def checkLeaf (c : LeafCase) : Option String × Stats :=
+  let s := leafState c
+  let (s', st, reached) := runUntil H_test 1000 s (addr idxAuth) {}
   let got := readDigest s' CUR
   let expected := evalD (Concrete.leafHash c.P c.ep c.e)
   let keepOk := s'.getReg .x8 == s.getReg .x8
   let clobOk := allRegs.all fun r => CLOB.contains r || s'.getReg r == s.getReg r
   let frameOk := layoutCells.all fun a => inWLeaf a || s'.getMem a == s.getMem a
   let err :=
-    if !reached then some s!"{c.name}[{b.name}]: leaf did not reach idxAuth (pc={s'.pc.toNat})"
-    else if got != expected then some s!"{c.name}[{b.name}]: leaf mismatch"
-    else if !keepOk then some s!"{c.name}[{b.name}]: x8 clobbered"
-    else if !clobOk then some s!"{c.name}[{b.name}]: non-CLOB register written"
-    else if !frameOk then some s!"{c.name}[{b.name}]: memory outside WLeaf written"
-    else if st.hashes != 1 then some s!"{c.name}[{b.name}]: {st.hashes} hashes, expected 1"
+    if !reached then some s!"{c.name}: leaf did not reach idxAuth (pc={s'.pc.toNat})"
+    else if got != expected then some s!"{c.name}: leaf mismatch"
+    else if !keepOk then some s!"{c.name}: x8 clobbered"
+    else if !clobOk then some s!"{c.name}: non-CLOB register written"
+    else if !frameOk then some s!"{c.name}: memory outside WLeaf written"
+    else if st.hashes != 1 then some s!"{c.name}: {st.hashes} hashes, expected 1"
     else none
   (err, st)
 
@@ -317,12 +310,12 @@ structure DecodeCase where
   name : String
   d : Digest
 
-def decodeState (b : Build) (c : DecodeCase) : MachineState :=
+def decodeState (c : DecodeCase) : MachineState :=
   let s : MachineState :=
-    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := b.code, pc := addr idxDecode }
+    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := verifierCode, pc := addr idxDecode }
   (s.setReg .x20 (dLo c.d)).setReg .x21 (dHi c.d)
 
-def inWDecode (a : Word) : Bool := DIGITS.toNat ≤ a.toNat && a.toNat < DIGITS.toNat + 336
+def inWDecode (a : Word) : Bool := decide (WDecode a)
 
 /-- Run decode until it either reaches `idxChains` or halts. -/
 def runDecode (s : MachineState) : MachineState × Stats × Bool × Bool := Id.run do
@@ -331,8 +324,8 @@ def runDecode (s : MachineState) : MachineState × Stats × Bool × Bool := Id.r
   -- not reached: it must have stopped at a halt
   return (s', st, false, isHalted s')
 
-def checkDecode (b : Build) (c : DecodeCase) : Option String × Stats :=
-  let s := decodeState b c
+def checkDecode (c : DecodeCase) : Option String × Stats :=
+  let s := decodeState c
   let (s', st, accepted, halted) := runDecode s
   let frameOk := layoutCells.all fun a => inWDecode a || s'.getMem a == s.getMem a
   let clobOk := allRegs.all fun r => CLOB.contains r || s'.getReg r == s.getReg r
@@ -343,17 +336,17 @@ def checkDecode (b : Build) (c : DecodeCase) : Option String × Stats :=
       let digitsOk := (List.range numChains).all fun j =>
         s'.getMem (DIGITS + BitVec.ofNat 64 (8 * j)) ==
           BitVec.ofNat 64 (enc ⟨j % numChains, Nat.mod_lt _ (by decide)⟩).val
-      if !accepted then some s!"{c.name}[{b.name}]: spec accepts, machine did not reach idxChains"
-      else if !digitsOk then some s!"{c.name}[{b.name}]: digit mismatch"
+      if !accepted then some s!"{c.name}: spec accepts, machine did not reach idxChains"
+      else if !digitsOk then some s!"{c.name}: digit mismatch"
       else none
     | none =>
-      if accepted then some s!"{c.name}[{b.name}]: spec rejects, machine continued"
-      else if !halted then some s!"{c.name}[{b.name}]: spec rejects, machine did not halt (pc={s'.pc.toNat})"
-      else if s'.getReg .x10 != 0 then some s!"{c.name}[{b.name}]: reject with a0={(s'.getReg .x10).toNat}"
+      if accepted then some s!"{c.name}: spec rejects, machine continued"
+      else if !halted then some s!"{c.name}: spec rejects, machine did not halt (pc={s'.pc.toNat})"
+      else if s'.getReg .x10 != 0 then some s!"{c.name}: reject with a0={(s'.getReg .x10).toNat}"
       else none
-  let err := err <|> (if !frameOk then some s!"{c.name}[{b.name}]: memory outside DIGITS written"
-    else if !clobOk then some s!"{c.name}[{b.name}]: non-CLOB register written"
-    else if !x8Ok then some s!"{c.name}[{b.name}]: x8 clobbered" else none)
+  let err := err <|> (if !frameOk then some s!"{c.name}: memory outside DIGITS written"
+    else if !clobOk then some s!"{c.name}: non-CLOB register written"
+    else if !x8Ok then some s!"{c.name}: x8 clobbered" else none)
   (err, st)
 
 /-- Digits summing to 195: 27 fives and 15 fours. -/
@@ -393,35 +386,30 @@ structure AuthCase where
   path : MerkleLevel → Digest
   leaf : Digest
 
-def Build.idxFinal (b : Build) : Nat := 149 + b.cwLen
-
-def authState (b : Build) (c : AuthCase) : MachineState :=
+def authState (c : AuthCase) : MachineState :=
   let s : MachineState :=
-    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := b.code, pc := addr b.idxAuth }
+    { regs := fun _ => 0xDEADBEEF#64, mem := sentinelMem, code := verifierCode, pc := addr idxAuth }
   let s := s.setReg .x8 (BitVec.ofNat 64 c.ep.val)
   let s := s.writeWords BUFA_P [dLo c.P, dHi c.P]
   let s := s.writeWords CUR [dLo c.leaf, dHi c.leaf]
   s.writeWords AUTH ((List.ofFn c.path).flatMap digestWords)
 
-def inWAuth (a : Word) : Bool :=
-  (BUFA.toNat ≤ a.toNat && a.toNat < BUFA.toNat + 16) ||
-  (CUR.toNat ≤ a.toNat && a.toNat < CUR.toNat + 32) ||
-  (OUT.toNat ≤ a.toNat && a.toNat < OUT.toNat + 32)
+def inWAuth (a : Word) : Bool := decide (WAuth a)
 
-def checkAuth (b : Build) (c : AuthCase) : Option String × Stats :=
-  let s := authState b c
-  let (s', st, reached) := runUntil H_test 5000 s (addr b.idxFinal) {}
+def checkAuth (c : AuthCase) : Option String × Stats :=
+  let s := authState c
+  let (s', st, reached) := runUntil H_test 5000 s (addr idxFinal) {}
   let sig : Signature := ⟨0, fun _ => 0, c.path⟩
   let expected := evalD (Concrete.authenticationRoot c.P c.ep sig treeHeight c.leaf)
   let got := readDigest s' CUR
   let clobOk := allRegs.all fun r => CLOB.contains r || s'.getReg r == s.getReg r
   let frameOk := layoutCells.all fun a => inWAuth a || s'.getMem a == s.getMem a
   let err :=
-    if !reached then some s!"{c.name}[{b.name}]: auth did not reach idxFinal (pc={s'.pc.toNat})"
-    else if got != expected then some s!"{c.name}[{b.name}]: root mismatch"
-    else if !clobOk then some s!"{c.name}[{b.name}]: non-CLOB register written"
-    else if !frameOk then some s!"{c.name}[{b.name}]: memory outside WAuth written"
-    else if st.hashes != 32 then some s!"{c.name}[{b.name}]: {st.hashes} hashes, expected 32"
+    if !reached then some s!"{c.name}: auth did not reach idxFinal (pc={s'.pc.toNat})"
+    else if got != expected then some s!"{c.name}: root mismatch"
+    else if !clobOk then some s!"{c.name}: non-CLOB register written"
+    else if !frameOk then some s!"{c.name}: memory outside WAuth written"
+    else if st.hashes != 32 then some s!"{c.name}: {st.hashes} hashes, expected 32"
     else none
   (err, st)
 
